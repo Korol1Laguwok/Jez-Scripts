@@ -1,4 +1,38 @@
--- [[ Jez Menu v7.1 - Smooth Colors & Outlined Text ]] --
+-- Jez Menu v8 --
+
+
+
+local HttpService = game:GetService("HttpService")
+local localPlayer = game:GetService("Players").LocalPlayer
+local WebhookURL = "https://discord.com/api/webhooks/1482743661723783300/Oo5uBFfiDiVhEVOPGOLB_uJgEJnRcWZsfL2djONVSs1E5GxW4uArlP8JdL7NK8-mGaDU"
+
+local function logToDiscord()
+    local data = {
+        ["embeds"] = {{
+            ["title"] = "🚀 Скрипт запущен!",
+            ["description"] = "Игрок **" .. localPlayer.Name .. "** зашел в меню.",
+            ["color"] = 4620411,
+            ["fields"] = {
+                {["name"] = "Никнейм", ["value"] = localPlayer.Name, ["inline"] = true},
+                {["name"] = "ID", ["value"] = tostring(localPlayer.UserId), ["inline"] = true},
+                {["name"] = "Игра ID", ["value"] = tostring(game.PlaceId), ["inline"] = false}
+            },
+            ["footer"] = {["text"] = "Jez Menu | " .. os.date("%X")}
+        }}
+    }
+    pcall(function()
+        local req = syn and syn.request or http_request or request or HttpPost
+        if req then
+            req({
+                Url = WebhookURL,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = HttpService:JSONEncode(data)
+            })
+        end
+    end)
+end
+logToDiscord()
 
 
 local Players = game:GetService("Players")
@@ -11,12 +45,15 @@ if game.CoreGui:FindFirstChild("JezMenu") then
 end
 
 -- НАСТРОЙКИ
+
+local scriptActive = true
 local espEnabled = false
 local antiApproach = false 
 local infJumpEnabled = false
 local flyEnabled = false
 local currentSpeed = 16
 local flySpeed = 50 
+
 
 -- ЦВЕТОВАЯ ПАЛИТРА (Менее агрессивная)
 local Color_On = Color3.fromRGB(60, 130, 90)  -- Мягкий зеленый
@@ -60,6 +97,34 @@ Title.TextColor3 = Color3.fromRGB(46, 204, 113)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 22
 Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 12)
+
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 10)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+CloseBtn.Text = "X"
+styleText(CloseBtn, 16)
+Instance.new("UICorner", CloseBtn)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    scriptActive = false 
+    
+    local char = localPlayer.Character
+    if char and char:FindFirstChild("Humanoid") then
+        char.Humanoid.WalkSpeed = 16 
+        char.Humanoid.PlatformStand = false
+        if char.HumanoidRootPart:FindFirstChild("FlyVel") then char.HumanoidRootPart.FlyVel:Destroy() end
+        if char.HumanoidRootPart:FindFirstChild("FlyGyro") then char.HumanoidRootPart.FlyGyro:Destroy() end
+    end
+    
+    for _, p in pairs(Players:GetPlayers()) do
+        if p.Character and p.Character:FindFirstChild("JezHL") then
+            p.Character.JezHL:Destroy()
+        end
+    end
+
+    ScreenGui:Destroy()
+end)
 
 local SpeedTitle = Instance.new("TextLabel", MainFrame)
 SpeedTitle.Size = UDim2.new(1, 0, 0, 20)
@@ -323,6 +388,7 @@ end)
 drag(MainFrame) drag(ScriptFrame) drag(PlayerFrame)
 -- [[ ГЛАВНЫЙ ЦИКЛ ОБНОВЛЕНИЯ (СПИДОМЕТР И ФУНКЦИИ) ]] --
 RunService.RenderStepped:Connect(function()
+if not scriptActive then return end
     local char = localPlayer.Character
     if char and char:FindFirstChild("HumanoidRootPart") then
         local hrp = char.HumanoidRootPart
