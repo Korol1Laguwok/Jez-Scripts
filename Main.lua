@@ -231,9 +231,7 @@ Instance.new("UICorner", SubFly)
 
 -- [[ ЛОГИКА И СОБЫТИЯ ]] --
 
--- [[ ЛОГИКА И СОБЫТИЯ ]] --
-
-local function addScript(name, url)
+local function addScript(name, url, extra)
     local b = Instance.new("TextButton", Scroll)
     b.Size = UDim2.new(1, 0, 0, 35)
     b.Text = name
@@ -256,7 +254,12 @@ local function addScript(name, url)
                 StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
                 StatusLabel.Text = "Успешно загружено!"
                 task.spawn(function()
-                    loadstring(scriptData)()
+                    local loaded = loadstring(scriptData)
+                    if extra then 
+                        loaded(extra) -- Запуск с аргументом (для инвиза)
+                    else 
+                        loaded() -- Обычный запуск
+                    end
                 end)
             else
                 StatusLabel.TextColor3 = Color3.fromRGB(231, 76, 60)
@@ -269,9 +272,10 @@ local function addScript(name, url)
     end)
 end
 
+-- ОБНОВЛЕННЫЙ СПИСОК СКРИПТОВ
 addScript("Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
 addScript("Lucky Blocks", "https://github.com/bruhhwtf/LUCKY-BLOCKS-Battlegrounds-GUI/raw/main/Main")
-addScript("Invisible", "https://raw.githubusercontent.com/00896/Invisible/main/Invisible.lua")
+addScript("Invisible", "https://pastebin.com/raw/3Rnd9rHf", "t.me/scriptrobox")
 
 SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     local text = SearchBox.Text:lower()
