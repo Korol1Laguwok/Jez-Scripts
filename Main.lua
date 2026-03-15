@@ -1,7 +1,6 @@
 -- Jez Menu v8 --
 
 
-
 local HttpService = game:GetService("HttpService")
 local localPlayer = game:GetService("Players").LocalPlayer
 local WebhookURL = "https://discord.com/api/webhooks/1482743661723783300/Oo5uBFfiDiVhEVOPGOLB_uJgEJnRcWZsfL2djONVSs1E5GxW4uArlP8JdL7NK8-mGaDU"
@@ -46,6 +45,7 @@ end
 
 -- НАСТРОЙКИ
 
+local noclipEnabled = false
 local scriptActive = true
 local espEnabled = false
 local antiApproach = false 
@@ -108,6 +108,7 @@ Instance.new("UICorner", CloseBtn)
 
 CloseBtn.MouseButton1Click:Connect(function()
     scriptActive = false 
+	noclipEnabled = false
     
     local char = localPlayer.Character
     if char and char:FindFirstChild("Humanoid") then
@@ -248,12 +249,28 @@ styleText(StatusLabel, 12)
 StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113) -- Зеленый цвет успеха
 
 -- 3. ОКНО ИГРОКА
+
 local PlayerFrame = Instance.new("Frame", ScreenGui)
 PlayerFrame.Size = UDim2.new(0, 220, 0, 240)
 PlayerFrame.Position = UDim2.new(0.1, 280, 0.4, 0)
 PlayerFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 PlayerFrame.Visible = false
 Instance.new("UICorner", PlayerFrame)
+
+local NoclipBtn = Instance.new("TextButton", PlayerFrame)
+NoclipBtn.Size = UDim2.new(0.9, 0, 0, 35)
+NoclipBtn.Position = UDim2.new(0.05, 0, 0.75, 0) -- Расположи ниже остальных
+NoclipBtn.Text = "Проход сквозь стены: ВЫКЛ"
+NoclipBtn.BackgroundColor3 = Color_Off
+styleText(NoclipBtn, 12)
+Instance.new("UICorner", NoclipBtn)
+
+NoclipBtn.MouseButton1Click:Connect(function()
+    noclipEnabled = not noclipEnabled
+    NoclipBtn.Text = "Проход сквозь стены: " .. (noclipEnabled and "ВКЛ" or "ВЫКЛ")
+    NoclipBtn.BackgroundColor3 = noclipEnabled and Color_On or Color_Off
+end)
+
 
 local InfJumpBtn = Instance.new("TextButton", PlayerFrame)
 InfJumpBtn.Size = UDim2.new(0.9, 0, 0, 35)
@@ -387,20 +404,41 @@ end)
 
 drag(MainFrame) drag(ScriptFrame) drag(PlayerFrame)
 -- [[ ГЛАВНЫЙ ЦИКЛ ОБНОВЛЕНИЯ (СПИДОМЕТР И ФУНКЦИИ) ]] --
+-- [[ ГЛАВНЫЙ ЦИКЛ ОБНОВЛЕНИЯ ]] --
 RunService.RenderStepped:Connect(function()
-if not scriptActive then return end
+    if not scriptActive then return end
+    
     local char = localPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
+    -- Проверяем наличие всех важных частей тела
+    if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
         local hrp = char.HumanoidRootPart
-        local hum = char:FindFirstChild("Humanoid")
+        local hum = char.Humanoid
         
-        -- Обновление цифр скорости (Спидометр)
+        -- Логика NoClip (Полное исправление)
+        if noclipEnabled then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") and part.CanCollide then
+                    part.CanCollide = false
+                end
+            end
+        else
+            -- ВКЛЮЧАЕМ коллизию только для ТОРСА, когда NoClip выключен
+            -- Это вернет персонажу физику, но не сломает его
+            if hrp.CanCollide == false then
+                hrp.CanCollide = true
+                if char:FindFirstChild("Torso") then char.Torso.CanCollide = true end
+                if char:FindFirstChild("UpperTorso") then char.UpperTorso.CanCollide = true end
+                if char:FindFirstChild("LowerTorso") then char.LowerTorso.CanCollide = true end
+            end
+        end
+        
+        -- Спидометр
         local velocity = hrp.Velocity
         local horizontalSpeed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
         SpeedLabel.Text = tostring(math.floor(horizontalSpeed))
         
-        -- Установка скорости ходьбы (если полет выключен)
-        if hum and not flyEnabled then
+        -- Скорость ходьбы
+        if not flyEnabled then
             hum.WalkSpeed = currentSpeed
         end
 
@@ -410,7 +448,7 @@ if not scriptActive then return end
             local bv = hrp:FindFirstChild("FlyVel")
             local bg = hrp:FindFirstChild("FlyGyro")
             if bv and bg then
-                bg.cframe = camera.CFrame
+                bg.CFrame = camera.CFrame
                 local dir = Vector3.new(0,0,0)
                 if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + camera.CFrame.LookVector end
                 if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - camera.CFrame.LookVector end
@@ -420,7 +458,7 @@ if not scriptActive then return end
             end
         end
 
-        -- Логика "Не подходи"
+        -- Логика "Не подходи" (Anti-Approach)
         if antiApproach then
             for _, p in pairs(Players:GetPlayers()) do
                 if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
