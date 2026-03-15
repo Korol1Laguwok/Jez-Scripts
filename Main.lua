@@ -1,4 +1,5 @@
--- [[ Jez Menu v5.7 - Animated Loader Edition ]] --
+-- [[ Jez Menu v7.1 - Smooth Colors & Outlined Text ]] --
+
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -9,243 +10,27 @@ if game.CoreGui:FindFirstChild("JezMenu") then
     game.CoreGui.JezMenu:Destroy()
 end
 
-local espEnabled = true
+-- НАСТРОЙКИ
+local espEnabled = false
 local antiApproach = false 
+local infJumpEnabled = false
+local flyEnabled = false
 local currentSpeed = 16
-local allScripts = {}
+local flySpeed = 50 
 
--- 1. ОСНОВНОЕ ОКНО
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "JezMenu"
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ResetOnSpawn = false
+-- ЦВЕТОВАЯ ПАЛИТРА (Менее агрессивная)
+local Color_On = Color3.fromRGB(60, 130, 90)  -- Мягкий зеленый
+local Color_Off = Color3.fromRGB(130, 60, 60) -- Мягкий красный
+local Color_Btn = Color3.fromRGB(45, 45, 45)  -- Серый для обычных кнопок
 
-local MainFrame = Instance.new("Frame")
-MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-MainFrame.Position = UDim2.new(0.1, 0, 0.4, 0)
-MainFrame.Size = UDim2.new(0, 230, 0, 320)
-MainFrame.BorderSizePixel = 0
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
-
--- Заголовок
-local Title = Instance.new("TextLabel")
-Title.Parent = MainFrame
-Title.Size = UDim2.new(1, 0, 0, 45)
-Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Title.Text = "Jez Меню"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 20
-Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 12)
-
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Parent = Title
-CloseBtn.Size = UDim2.new(0, 30, 0, 30)
-CloseBtn.Position = UDim2.new(1, -38, 0, 7)
-CloseBtn.BackgroundTransparency = 1
-CloseBtn.Text = "×"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 28
-CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
-
--- Скорость
-local SpeedContainer = Instance.new("Frame")
-SpeedContainer.Parent = MainFrame
-SpeedContainer.Size = UDim2.new(0.9, 0, 0, 35)
-SpeedContainer.Position = UDim2.new(0.05, 0, 0.16, 0)
-SpeedContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Instance.new("UICorner", SpeedContainer).CornerRadius = UDim.new(0, 6)
-
-local SpeedLabel = Instance.new("TextLabel")
-SpeedLabel.Parent = SpeedContainer
-SpeedLabel.Size = UDim2.new(0.6, 0, 1, 0)
-SpeedLabel.BackgroundTransparency = 1
-SpeedLabel.Text = "СКОРОСТЬ: 16.0"
-SpeedLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
-SpeedLabel.Font = Enum.Font.Code
-SpeedLabel.TextSize = 14
-
-local ResetBtn = Instance.new("TextButton")
-ResetBtn.Parent = SpeedContainer
-ResetBtn.Size = UDim2.new(0.35, 0, 0.8, 0)
-ResetBtn.Position = UDim2.new(0.62, 0, 0.1, 0)
-ResetBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-ResetBtn.Text = "Сброс"
-ResetBtn.TextColor3 = Color3.new(1, 1, 1)
-ResetBtn.Font = Enum.Font.GothamBold
-ResetBtn.TextSize = 12
-Instance.new("UICorner", ResetBtn).CornerRadius = UDim.new(0, 4)
-ResetBtn.MouseButton1Click:Connect(function() currentSpeed = 16 end)
-
-local AddSpeed = Instance.new("TextButton")
-AddSpeed.Parent = MainFrame
-AddSpeed.Size = UDim2.new(0.43, 0, 0, 30)
-AddSpeed.Position = UDim2.new(0.05, 0, 0.30, 0)
-AddSpeed.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-AddSpeed.Text = "+ СКОРОСТЬ"
-AddSpeed.TextColor3 = Color3.fromRGB(46, 204, 113)
-AddSpeed.Font = Enum.Font.GothamBold
-AddSpeed.TextSize = 12
-Instance.new("UICorner", AddSpeed).CornerRadius = UDim.new(0, 6)
-AddSpeed.MouseButton1Click:Connect(function() currentSpeed = currentSpeed + 1 end)
-
-local SubSpeed = Instance.new("TextButton")
-SubSpeed.Parent = MainFrame
-SubSpeed.Size = UDim2.new(0.43, 0, 0, 30)
-SubSpeed.Position = UDim2.new(0.52, 0, 0.30, 0)
-SubSpeed.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-SubSpeed.Text = "- СКОРОСТЬ"
-SubSpeed.TextColor3 = Color3.fromRGB(231, 76, 60)
-SubSpeed.Font = Enum.Font.GothamBold
-SubSpeed.TextSize = 12
-Instance.new("UICorner", SubSpeed).CornerRadius = UDim.new(0, 6)
-SubSpeed.MouseButton1Click:Connect(function() currentSpeed = currentSpeed - 1 end)
-
-local AntiBtn = Instance.new("TextButton")
-AntiBtn.Parent = MainFrame
-AntiBtn.Size = UDim2.new(0.9, 0, 0, 40)
-AntiBtn.Position = UDim2.new(0.05, 0, 0.44, 0)
-AntiBtn.BackgroundColor3 = Color3.fromRGB(192, 57, 43)
-AntiBtn.Text = "Не подходи: ВЫКЛ"
-AntiBtn.TextColor3 = Color3.new(1, 1, 1)
-AntiBtn.Font = Enum.Font.GothamBold
-AntiBtn.TextSize = 14
-Instance.new("UICorner", AntiBtn).CornerRadius = UDim.new(0, 8)
-
-local ESPBtn = Instance.new("TextButton")
-ESPBtn.Parent = MainFrame
-ESPBtn.Size = UDim2.new(0.9, 0, 0, 40)
-ESPBtn.Position = UDim2.new(0.05, 0, 0.60, 0)
-ESPBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-ESPBtn.Text = "Подсветка: ВКЛ"
-ESPBtn.TextColor3 = Color3.new(1, 1, 1)
-ESPBtn.Font = Enum.Font.GothamBold
-ESPBtn.TextSize = 14
-Instance.new("UICorner", ESPBtn).CornerRadius = UDim.new(0, 8)
-
-local OpenScriptsBtn = Instance.new("TextButton")
-OpenScriptsBtn.Parent = MainFrame
-OpenScriptsBtn.Size = UDim2.new(0.9, 0, 0, 40)
-OpenScriptsBtn.Position = UDim2.new(0.05, 0, 0.77, 0)
-OpenScriptsBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-OpenScriptsBtn.Text = "СПИСОК СКРИПТОВ"
-OpenScriptsBtn.TextColor3 = Color3.new(1, 1, 1)
-OpenScriptsBtn.Font = Enum.Font.GothamBold
-OpenScriptsBtn.TextSize = 14
-Instance.new("UICorner", OpenScriptsBtn).CornerRadius = UDim.new(0, 8)
-
--- 2. ОКНО СКРИПТОВ
-local ScriptFrame = Instance.new("Frame")
-ScriptFrame.Parent = ScreenGui
-ScriptFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-ScriptFrame.Position = UDim2.new(0.1, 240, 0.4, 0)
-ScriptFrame.Size = UDim2.new(0, 200, 0, 240)
-ScriptFrame.Visible = false
-Instance.new("UICorner", ScriptFrame).CornerRadius = UDim.new(0, 10)
-
-local SearchBox = Instance.new("TextBox")
-SearchBox.Parent = ScriptFrame
-SearchBox.Size = UDim2.new(0.9, 0, 0, 30)
-SearchBox.Position = UDim2.new(0.05, 0, 0.05, 0)
-SearchBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-SearchBox.PlaceholderText = "Поиск..."
-SearchBox.Text = ""
-SearchBox.TextColor3 = Color3.new(1, 1, 1)
-SearchBox.Font = Enum.Font.GothamBold
-SearchBox.TextSize = 12
-Instance.new("UICorner", SearchBox).CornerRadius = UDim.new(0, 6)
-
-local Scroll = Instance.new("ScrollingFrame")
-Scroll.Parent = ScriptFrame
-Scroll.Position = UDim2.new(0.05, 0, 0.2, 0)
-Scroll.Size = UDim2.new(0.9, 0, 0.75, 0)
-Scroll.BackgroundTransparency = 1
-Scroll.ScrollBarThickness = 2
-Scroll.CanvasSize = UDim2.new(0,0,0,0)
-local UIList = Instance.new("UIListLayout")
-UIList.Parent = Scroll
-UIList.Padding = UDim.new(0, 5)
-
--- ФУНКЦИЯ ДОБАВЛЕНИЯ СКРИПТА С АНИМАЦИЕЙ
-local function addScript(name, url)
-    local b = Instance.new("TextButton")
-    b.Parent = Scroll
-    b.Size = UDim2.new(1, 0, 0, 35)
-    b.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    b.Text = name
-    b.TextColor3 = Color3.new(1, 1, 1)
-    b.Font = Enum.Font.GothamBold
-    b.TextSize = 11
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
-    
-    b.MouseButton1Click:Connect(function() 
-        -- Анимация "Загрузка"
-        b.Text = "Загрузка..."
-        b.BackgroundColor3 = Color3.fromRGB(241, 196, 15) -- Желтый
-        
-        task.delay(0.8, function()
-            local success, err = pcall(function() 
-                loadstring(game:HttpGet(url))() 
-            end)
-            
-            if success then
-                b.Text = "Готово!"
-                b.BackgroundColor3 = Color3.fromRGB(46, 204, 113) -- Зеленый
-            else
-                b.Text = "Ошибка!"
-                b.BackgroundColor3 = Color3.fromRGB(192, 57, 43) -- Красный
-            end
-            
-            task.wait(1.5)
-            b.Text = name
-            b.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        end)
-    end)
-    
-    table.insert(allScripts, b)
-    Scroll.CanvasSize = UDim2.new(0,0,0, UIList.AbsoluteContentSize.Y)
+-- ФУНКЦИЯ ДЛЯ ТЕКСТА С ОБВОДКОЙ
+local function styleText(obj, size)
+    obj.TextColor3 = Color3.new(1, 1, 1)
+    obj.Font = Enum.Font.GothamBold
+    obj.TextSize = size
+    obj.TextStrokeTransparency = 0.5 -- Обводка
+    obj.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
-
-addScript("Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
-addScript("Lucky Blocks", "https://github.com/bruhhwtf/LUCKY-BLOCKS-Battlegrounds-GUI/raw/main/Main")
-
--- Логика переключения "Не подходи"
-AntiBtn.MouseButton1Click:Connect(function()
-    antiApproach = not antiApproach
-    AntiBtn.Text = antiApproach and "Не подходи: ВКЛ" or "Не подходи: ВЫКЛ"
-    AntiBtn.BackgroundColor3 = antiApproach and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(192, 57, 43)
-end)
-
--- ГЛАВНЫЙ ЦИКЛ
-RunService.RenderStepped:Connect(function()
-    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local hrp = localPlayer.Character.HumanoidRootPart
-        if localPlayer.Character:FindFirstChild("Humanoid") then
-            localPlayer.Character.Humanoid.WalkSpeed = currentSpeed
-            SpeedLabel.Text = string.format("СКОРОСТЬ: %.1f", hrp.Velocity.Magnitude)
-        end
-        if antiApproach then
-            for _, player in pairs(Players:GetPlayers()) do
-                if player ~= localPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    local targetHrp = player.Character.HumanoidRootPart
-                    if (hrp.Position - targetHrp.Position).Magnitude < 6 then
-                        hrp.CFrame = hrp.CFrame + ((hrp.Position - targetHrp.Position).Unit * 0.5)
-                    end
-                end
-            end
-        end
-    end
-end)
-
-OpenScriptsBtn.MouseButton1Click:Connect(function() ScriptFrame.Visible = not ScriptFrame.Visible end)
-
--- Остальное (Поиск, Драг, ЕСП)
-SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-    local t = SearchBox.Text:lower()
-    for _, b in pairs(allScripts) do b.Visible = (t == "" or b.Text:lower():find(t)) end
-end)
 
 local function drag(frame)
     local d, ds, sp
@@ -256,20 +41,345 @@ local function drag(frame)
     end end)
     UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then d = false end end)
 end
-drag(MainFrame)
-drag(ScriptFrame)
 
-local function updateHL(p, c)
-    if not c or p == localPlayer then return end
-    local hl = c:FindFirstChild("JezHL") or Instance.new("Highlight", c)
-    hl.Enabled = espEnabled
-    hl.FillColor = (p.Team == localPlayer.Team and p.Team ~= nil) and Color3.new(0,1,0) or Color3.new(1,0,0)
-    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-end
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "JezMenu"
+
+-- 1. ГЛАВНОЕ ОКНО
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+MainFrame.Position = UDim2.new(0.1, 0, 0.4, 0)
+MainFrame.Size = UDim2.new(0, 250, 0, 400)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Title.Text = "Jez Меню"
+Title.TextColor3 = Color3.fromRGB(46, 204, 113)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 22
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 12)
+
+local SpeedTitle = Instance.new("TextLabel", MainFrame)
+SpeedTitle.Size = UDim2.new(1, 0, 0, 20)
+SpeedTitle.Position = UDim2.new(0, 0, 0, 65)
+SpeedTitle.BackgroundTransparency = 1
+SpeedTitle.Text = "ТЕКУЩАЯ СКОРОСТЬ"
+styleText(SpeedTitle, 13)
+
+local SpeedLabel = Instance.new("TextLabel", MainFrame)
+SpeedLabel.Size = UDim2.new(0.9, 0, 0, 50)
+SpeedLabel.Position = UDim2.new(0.05, 0, 0, 90)
+SpeedLabel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+SpeedLabel.Text = "0"
+SpeedLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
+SpeedLabel.Font = Enum.Font.GothamBold
+SpeedLabel.TextSize = 28
+Instance.new("UICorner", SpeedLabel).CornerRadius = UDim.new(0, 8)
+
+-- КНОПКИ БЕГА
+local AddS = Instance.new("TextButton", MainFrame)
+AddS.Size = UDim2.new(0.43, 0, 0, 35)
+AddS.Position = UDim2.new(0.05, 0, 0, 155)
+AddS.BackgroundColor3 = Color_Btn
+AddS.Text = "+1 БЕГ"
+styleText(AddS, 14)
+Instance.new("UICorner", AddS)
+AddS.MouseButton1Click:Connect(function() currentSpeed = currentSpeed + 1 end)
+
+local SubS = Instance.new("TextButton", MainFrame)
+SubS.Size = UDim2.new(0.43, 0, 0, 35)
+SubS.Position = UDim2.new(0.52, 0, 0, 155)
+SubS.BackgroundColor3 = Color_Btn
+SubS.Text = "-1 БЕГ"
+styleText(SubS, 14)
+Instance.new("UICorner", SubS)
+SubS.MouseButton1Click:Connect(function() currentSpeed = math.max(0, currentSpeed - 1) end)
+
+-- ГЛАВНЫЕ КНОПКИ (С МЯГКИМИ ЦВЕТАМИ)
+local AntiBtn = Instance.new("TextButton", MainFrame)
+AntiBtn.Size = UDim2.new(0.9, 0, 0, 45)
+AntiBtn.Position = UDim2.new(0.05, 0, 0, 205)
+AntiBtn.BackgroundColor3 = Color_Off
+AntiBtn.Text = "Не подходи: ВЫКЛ"
+styleText(AntiBtn, 14)
+Instance.new("UICorner", AntiBtn)
+
+local ESPBtn = Instance.new("TextButton", MainFrame)
+ESPBtn.Size = UDim2.new(0.9, 0, 0, 45)
+ESPBtn.Position = UDim2.new(0.05, 0, 0, 265)
+ESPBtn.BackgroundColor3 = Color_Off
+ESPBtn.Text = "Подсветка: ВЫКЛ"
+styleText(ESPBtn, 14)
+Instance.new("UICorner", ESPBtn)
+
+local OpenScripts = Instance.new("TextButton", MainFrame)
+OpenScripts.Size = UDim2.new(0.43, 0, 0, 45)
+OpenScripts.Position = UDim2.new(0.05, 0, 0, 330)
+OpenScripts.BackgroundColor3 = Color_Btn
+OpenScripts.Text = "СКРИПТЫ"
+styleText(OpenScripts, 14)
+Instance.new("UICorner", OpenScripts)
+
+local OpenPlayer = Instance.new("TextButton", MainFrame)
+OpenPlayer.Size = UDim2.new(0.43, 0, 0, 45)
+OpenPlayer.Position = UDim2.new(0.52, 0, 0, 330)
+OpenPlayer.BackgroundColor3 = Color_Btn
+OpenPlayer.Text = "ИГРОК"
+styleText(OpenPlayer, 14)
+Instance.new("UICorner", OpenPlayer)
+
+-- ЛОГИКА КНОПОК
+AntiBtn.MouseButton1Click:Connect(function()
+    antiApproach = not antiApproach
+    AntiBtn.Text = antiApproach and "Не подходи: ВКЛ" or "Не подходи: ВЫКЛ"
+    AntiBtn.BackgroundColor3 = antiApproach and Color_On or Color_Off
+end)
 
 ESPBtn.MouseButton1Click:Connect(function()
     espEnabled = not espEnabled
-    ESPBtn.Text = espEnabled and "Подсветка: ВКЛ" or "Подсветка: ВЫКЛ"
-    ESPBtn.BackgroundColor3 = espEnabled and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(192, 57, 43)
-    for _, p in pairs(Players:GetPlayers()) do if p.Character then updateHL(p, p.Character) end end
+    ESPBtn.Text = "Подсветка: " .. (espEnabled and "ВКЛ" or "ВЫКЛ")
+    ESPBtn.BackgroundColor3 = espEnabled and Color_On or Color_Off
+    for _, p in pairs(Players:GetPlayers()) do
+        if p.Character and p.Character:FindFirstChild("JezHL") then
+            p.Character.JezHL.Enabled = espEnabled
+        end
+    end
+end)
+
+-- [[ ДОПОЛНИТЕЛЬНЫЕ ОКНА (Исправленные) ]] --
+
+-- 2. ОКНО СКРИПТОВ
+local ScriptFrame = Instance.new("Frame", ScreenGui)
+ScriptFrame.Size = UDim2.new(0, 220, 0, 280)
+ScriptFrame.Position = UDim2.new(0.1, 280, 0.4, 0)
+ScriptFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+ScriptFrame.Visible = false
+Instance.new("UICorner", ScriptFrame)
+
+local SearchBox = Instance.new("TextBox", ScriptFrame)
+SearchBox.Size = UDim2.new(0.9, 0, 0, 30)
+SearchBox.Position = UDim2.new(0.05, 0, 0.05, 0)
+SearchBox.PlaceholderText = "Поиск..."
+SearchBox.Text = "" -- ВОТ ЭТА СТРОЧКА УБИРАЕТ НАДПИСЬ "TextBox"
+SearchBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+styleText(SearchBox, 14)
+Instance.new("UICorner", SearchBox)
+
+local Scroll = Instance.new("ScrollingFrame", ScriptFrame)
+Scroll.Size = UDim2.new(0.9, 0, 0.75, 0)
+Scroll.Position = UDim2.new(0.05, 0, 0.2, 0)
+Scroll.BackgroundTransparency = 1
+Scroll.CanvasSize = UDim2.new(0,0,0,0)
+Instance.new("UIListLayout", Scroll).Padding = UDim.new(0, 5)
+
+local StatusLabel = Instance.new("TextLabel", ScriptFrame)
+StatusLabel.Size = UDim2.new(0.9, 0, 0, 20)
+StatusLabel.Position = UDim2.new(0.05, 0, 0.93, 0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "" -- По умолчанию пусто
+styleText(StatusLabel, 12)
+StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113) -- Зеленый цвет успеха
+
+-- 3. ОКНО ИГРОКА
+local PlayerFrame = Instance.new("Frame", ScreenGui)
+PlayerFrame.Size = UDim2.new(0, 220, 0, 240)
+PlayerFrame.Position = UDim2.new(0.1, 280, 0.4, 0)
+PlayerFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+PlayerFrame.Visible = false
+Instance.new("UICorner", PlayerFrame)
+
+local InfJumpBtn = Instance.new("TextButton", PlayerFrame)
+InfJumpBtn.Size = UDim2.new(0.9, 0, 0, 35)
+InfJumpBtn.Position = UDim2.new(0.05, 0, 0.1, 0)
+InfJumpBtn.Text = "Прыжок: ВЫКЛ"
+InfJumpBtn.BackgroundColor3 = Color_Off
+styleText(InfJumpBtn, 12)
+Instance.new("UICorner", InfJumpBtn)
+
+local FlyBtn = Instance.new("TextButton", PlayerFrame)
+FlyBtn.Size = UDim2.new(0.9, 0, 0, 35)
+FlyBtn.Position = UDim2.new(0.05, 0, 0.3, 0)
+FlyBtn.Text = "Полет: ВЫКЛ"
+FlyBtn.BackgroundColor3 = Color_Off
+styleText(FlyBtn, 12)
+Instance.new("UICorner", FlyBtn)
+
+local FlySpeedLabel = Instance.new("TextLabel", PlayerFrame)
+FlySpeedLabel.Size = UDim2.new(0.9, 0, 0, 20)
+FlySpeedLabel.Position = UDim2.new(0.05, 0, 0.48, 0)
+FlySpeedLabel.Text = "СКОРОСТЬ ПОЛЕТА: 50"
+FlySpeedLabel.BackgroundTransparency = 1
+styleText(FlySpeedLabel, 10)
+
+local AddFly = Instance.new("TextButton", PlayerFrame)
+AddFly.Size = UDim2.new(0.43, 0, 0, 30)
+AddFly.Position = UDim2.new(0.05, 0, 0.58, 0)
+AddFly.Text = "+ ПОЛЕТ"
+AddFly.BackgroundColor3 = Color_Btn
+styleText(AddFly, 12)
+Instance.new("UICorner", AddFly)
+
+local SubFly = Instance.new("TextButton", PlayerFrame)
+SubFly.Size = UDim2.new(0.43, 0, 0, 30)
+SubFly.Position = UDim2.new(0.52, 0, 0.58, 0)
+SubFly.Text = "- ПОЛЕТ"
+SubFly.BackgroundColor3 = Color_Btn
+styleText(SubFly, 12)
+Instance.new("UICorner", SubFly)
+
+-- [[ ЛОГИКА И СОБЫТИЯ ]] --
+
+-- [[ ЛОГИКА И СОБЫТИЯ ]] --
+
+local function addScript(name, url)
+    local b = Instance.new("TextButton", Scroll)
+    b.Size = UDim2.new(1, 0, 0, 35)
+    b.Text = name
+    b.Name = name:lower()
+    b.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    styleText(b, 12)
+    Instance.new("UICorner", b)
+    
+    b.MouseButton1Click:Connect(function()
+        StatusLabel.Text = "Загрузка..."
+        StatusLabel.TextColor3 = Color3.fromRGB(241, 196, 15)
+        
+        task.spawn(function()
+            local scriptData
+            local downloadSuccess = pcall(function()
+                scriptData = game:HttpGet(url)
+            end)
+            
+            if downloadSuccess and scriptData then
+                StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
+                StatusLabel.Text = "Успешно загружено!"
+                task.spawn(function()
+                    loadstring(scriptData)()
+                end)
+            else
+                StatusLabel.TextColor3 = Color3.fromRGB(231, 76, 60)
+                StatusLabel.Text = "Ошибка сети"
+            end
+            
+            task.wait(2)
+            StatusLabel.Text = ""
+        end)
+    end)
+end
+
+addScript("Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
+addScript("Lucky Blocks", "https://github.com/bruhhwtf/LUCKY-BLOCKS-Battlegrounds-GUI/raw/main/Main")
+addScript("Invisible", "https://raw.githubusercontent.com/00896/Invisible/main/Invisible.lua")
+
+SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local text = SearchBox.Text:lower()
+    for _, child in pairs(Scroll:GetChildren()) do
+        if child:IsA("TextButton") then child.Visible = child.Name:find(text) and true or false end
+    end
+end)
+
+OpenScripts.MouseButton1Click:Connect(function() ScriptFrame.Visible = not ScriptFrame.Visible PlayerFrame.Visible = false end)
+OpenPlayer.MouseButton1Click:Connect(function() PlayerFrame.Visible = not PlayerFrame.Visible ScriptFrame.Visible = false end)
+
+InfJumpBtn.MouseButton1Click:Connect(function()
+    infJumpEnabled = not infJumpEnabled
+    InfJumpBtn.Text = "Прыжок: " .. (infJumpEnabled and "ВКЛ" or "ВЫКЛ")
+    InfJumpBtn.BackgroundColor3 = infJumpEnabled and Color_On or Color_Off
+end)
+
+AddFly.MouseButton1Click:Connect(function() flySpeed = flySpeed + 10 FlySpeedLabel.Text = "СКОРОСТЬ ПОЛЕТА: "..flySpeed end)
+SubFly.MouseButton1Click:Connect(function() flySpeed = math.max(0, flySpeed - 10) FlySpeedLabel.Text = "СКОРОСТЬ ПОЛЕТА: "..flySpeed end)
+
+FlyBtn.MouseButton1Click:Connect(function()
+    flyEnabled = not flyEnabled
+    FlyBtn.Text = "Полет: " .. (flyEnabled and "ВКЛ" or "ВЫКЛ")
+    FlyBtn.BackgroundColor3 = flyEnabled and Color_On or Color_Off
+    local char = localPlayer.Character
+    if char and char:FindFirstChild("Humanoid") then
+        if not flyEnabled then
+            char.Humanoid.PlatformStand = false
+            if char.HumanoidRootPart:FindFirstChild("FlyVel") then char.HumanoidRootPart.FlyVel:Destroy() end
+            if char.HumanoidRootPart:FindFirstChild("FlyGyro") then char.HumanoidRootPart.FlyGyro:Destroy() end
+        else
+            char.Humanoid.PlatformStand = true
+            local bg = Instance.new("BodyGyro", char.HumanoidRootPart) bg.Name = "FlyGyro" bg.maxTorque = Vector3.new(9e9,9e9,9e9)
+            local bv = Instance.new("BodyVelocity", char.HumanoidRootPart) bv.Name = "FlyVel" bv.maxForce = Vector3.new(9e9,9e9,9e9)
+        end
+    end
+end)
+
+UserInputService.JumpRequest:Connect(function() 
+    if infJumpEnabled and localPlayer.Character:FindFirstChildOfClass("Humanoid") then 
+        localPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping") 
+    end 
+end)
+
+drag(MainFrame) drag(ScriptFrame) drag(PlayerFrame)
+-- [[ ГЛАВНЫЙ ЦИКЛ ОБНОВЛЕНИЯ (СПИДОМЕТР И ФУНКЦИИ) ]] --
+RunService.RenderStepped:Connect(function()
+    local char = localPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local hrp = char.HumanoidRootPart
+        local hum = char:FindFirstChild("Humanoid")
+        
+        -- Обновление цифр скорости (Спидометр)
+        local velocity = hrp.Velocity
+        local horizontalSpeed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+        SpeedLabel.Text = tostring(math.floor(horizontalSpeed))
+        
+        -- Установка скорости ходьбы (если полет выключен)
+        if hum and not flyEnabled then
+            hum.WalkSpeed = currentSpeed
+        end
+
+        -- Логика полета
+        if flyEnabled then
+            local camera = workspace.CurrentCamera
+            local bv = hrp:FindFirstChild("FlyVel")
+            local bg = hrp:FindFirstChild("FlyGyro")
+            if bv and bg then
+                bg.cframe = camera.CFrame
+                local dir = Vector3.new(0,0,0)
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + camera.CFrame.RightVector end
+                bv.velocity = dir * flySpeed
+            end
+        end
+
+        -- Логика "Не подходи"
+        if antiApproach then
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetPos = p.Character.HumanoidRootPart.Position
+                    if (hrp.Position - targetPos).Magnitude < 7 then
+                        hrp.CFrame = hrp.CFrame + ((hrp.Position - targetPos).Unit * 1.5)
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- [[ ФУНКЦИЯ ESP (ПОДСВЕТКА) ]] --
+local function applyESP(player)
+    if player ~= localPlayer and player.Character then
+        local hl = player.Character:FindFirstChild("JezHL") or Instance.new("Highlight", player.Character)
+        hl.Name = "JezHL"
+        hl.Enabled = espEnabled
+        hl.FillColor = Color3.fromRGB(46, 204, 113)
+        hl.OutlineColor = Color3.new(1, 1, 1)
+    end
+end
+
+-- Авто-применение ESP при спавне игроков
+for _, p in pairs(Players:GetPlayers()) do
+    p.CharacterAdded:Connect(function() task.wait(0.5) applyESP(p) end)
+    if p.Character then applyESP(p) end
+end
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function() task.wait(0.5) applyESP(p) end)
 end)
