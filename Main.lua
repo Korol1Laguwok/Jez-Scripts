@@ -1,4 +1,8 @@
--- Jez Menu v9 --
+-- Jez Menu v11 --
+
+
+
+
 
 
 local HttpService = game:GetService("HttpService")
@@ -31,8 +35,8 @@ local function logToDiscord()
         end
     end)
 end
-logToDiscord()
 
+logToDiscord()
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -51,7 +55,7 @@ local espEnabled = false
 local antiApproach = false 
 local infJumpEnabled = false
 local flyEnabled = false
-local currentSpeed = 16
+local currentSpeed = nil 
 local flySpeed = 50 
 
 
@@ -82,13 +86,61 @@ end
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.Name = "JezMenu"
 
+-- LOADING SCREEN
+
+local LoadingFrame = Instance.new("Frame", ScreenGui)
+LoadingFrame.Size = UDim2.new(1, 0, 1, 0)
+LoadingFrame.BackgroundTransparency = 1 -- Прозрачный фон, как ты и хотел
+
+local LoadingIcon = Instance.new("ImageLabel", LoadingFrame)
+LoadingIcon.Size = UDim2.new(0, 140, 0, 140)
+LoadingIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+LoadingIcon.Position = UDim2.new(0.5, 0, 0.45, 0) -- Чуть выше центра
+LoadingIcon.BackgroundTransparency = 0.2 -- Слегка заметный фон под иконкой
+LoadingIcon.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+LoadingIcon.Image = "rbxassetid://115895618324258"
+LoadingIcon.ScaleType = Enum.ScaleType.Fit
+
+-- Скругляем углы у логотипа, чтобы не было "квадрата"
+local IconCorner = Instance.new("UICorner", LoadingIcon)
+IconCorner.CornerRadius = UDim.new(0, 20)
+
+local LoadingText = Instance.new("TextLabel", LoadingFrame)
+LoadingText.Size = UDim2.new(1, 0, 0, 50)
+LoadingText.Position = UDim2.new(0, 0, 0.6, 0) -- Текст под иконкой
+LoadingText.BackgroundTransparency = 1
+LoadingText.Text = "ЗАГРУЗКА..."
+LoadingText.TextColor3 = Color3.fromRGB(46, 204, 113)
+LoadingText.Font = Enum.Font.GothamBold
+LoadingText.TextSize = 32 -- Сделал чуть крупнее
+LoadingText.TextStrokeTransparency = 0 -- Полная обводка
+
+-- ДОБАВЛЯЕМ КРАСИВУЮ ОБВОДКУ ТЕКСТУ
+local TextStroke = Instance.new("UIStroke", LoadingText)
+TextStroke.Thickness = 2.5 -- Толщина линии
+TextStroke.Color = Color3.fromRGB(0, 0, 0) -- Черный цвет обводки
+
+
 -- 1. ГЛАВНОЕ ОКНО
 local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Visible = false
 MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 MainFrame.Position = UDim2.new(0.1, 0, 0.4, 0)
 MainFrame.Size = UDim2.new(0, 250, 0, 400)
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
 
+task.spawn(function()
+    task.wait(5) -- Ждем 5 секунд
+    if LoadingFrame then 
+        LoadingFrame:Destroy() 
+    end
+    if MainFrame then 
+        MainFrame.Visible = true 
+    end
+    print("Jez Menu: Загрузка завершена")
+end)
+
+-- ОБНОВЛЕННЫЙ ЗАГОЛОВОК С ЗЕЛЕНОЙ ИКОНКОЙ
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Size = UDim2.new(1, 0, 0, 50)
 Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
@@ -96,7 +148,18 @@ Title.Text = "Jez Меню"
 Title.TextColor3 = Color3.fromRGB(46, 204, 113)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 22
+Title.TextXAlignment = Enum.TextXAlignment.Center -- Центрируем текст
 Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 12)
+
+local CustomIcon = Instance.new("ImageLabel", Title)
+CustomIcon.Name = "CustomIcon"
+CustomIcon.Size = UDim2.new(0, 32, 0, 32)
+CustomIcon.Position = UDim2.new(0, 10, 0.5, -16) 
+CustomIcon.BackgroundTransparency = 1
+CustomIcon.Image = "rbxassetid://115895618324258"
+CustomIcon.ScaleType = Enum.ScaleType.Fit -- Чтобы маленькую иконку не сплющило
+CustomIcon.ZIndex = 20 
+CustomIcon.Visible = true
 
 local CloseBtn = Instance.new("TextButton", MainFrame)
 CloseBtn.Size = UDim2.new(0, 30, 0, 30)
@@ -144,7 +207,7 @@ SpeedLabel.Font = Enum.Font.GothamBold
 SpeedLabel.TextSize = 28
 Instance.new("UICorner", SpeedLabel).CornerRadius = UDim.new(0, 8)
 
--- КНОПКИ БЕГА
+-- КНОПКИ БЕГА (ИСПРАВЛЕННЫЕ)
 local AddS = Instance.new("TextButton", MainFrame)
 AddS.Size = UDim2.new(0.43, 0, 0, 35)
 AddS.Position = UDim2.new(0.05, 0, 0, 155)
@@ -152,7 +215,14 @@ AddS.BackgroundColor3 = Color_Btn
 AddS.Text = "+1 БЕГ"
 styleText(AddS, 14)
 Instance.new("UICorner", AddS)
-AddS.MouseButton1Click:Connect(function() currentSpeed = currentSpeed + 1 end)
+
+AddS.MouseButton1Click:Connect(function() 
+    local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
+    if hum then
+        hum.WalkSpeed = hum.WalkSpeed + 1 -- Увеличиваем текущую скорость
+        currentSpeed = hum.WalkSpeed -- Запоминаем для меню
+    end
+end)
 
 local SubS = Instance.new("TextButton", MainFrame)
 SubS.Size = UDim2.new(0.43, 0, 0, 35)
@@ -161,7 +231,14 @@ SubS.BackgroundColor3 = Color_Btn
 SubS.Text = "-1 БЕГ"
 styleText(SubS, 14)
 Instance.new("UICorner", SubS)
-SubS.MouseButton1Click:Connect(function() currentSpeed = math.max(0, currentSpeed - 1) end)
+
+SubS.MouseButton1Click:Connect(function() 
+    local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
+    if hum then
+        hum.WalkSpeed = math.max(0, hum.WalkSpeed - 1) -- Уменьшаем текущую скорость
+        currentSpeed = hum.WalkSpeed -- Запоминаем для меню
+    end
+end)
 
 -- ГЛАВНЫЕ КНОПКИ (С МЯГКИМИ ЦВЕТАМИ)
 local AntiBtn = Instance.new("TextButton", MainFrame)
@@ -436,11 +513,7 @@ RunService.RenderStepped:Connect(function()
         local velocity = hrp.Velocity
         local horizontalSpeed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
         SpeedLabel.Text = tostring(math.floor(horizontalSpeed))
-        
-        -- Скорость ходьбы
-        if not flyEnabled then
-            hum.WalkSpeed = currentSpeed
-        end
+    
 
         -- Логика полета
         if flyEnabled then
@@ -491,3 +564,5 @@ end
 Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function() task.wait(0.5) applyESP(p) end)
 end)
+
+
