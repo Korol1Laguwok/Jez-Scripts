@@ -1,5 +1,4 @@
--- Jez Menu v12 --
-
+-- Jez Menu v13 --
 
 
 
@@ -377,56 +376,42 @@ StatusLabel.Text = "" -- По умолчанию пусто
 styleText(StatusLabel, 12)
 StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113) -- Зеленый цвет успеха
 
--- 3. ОКНО ИГРОКА
+-- 3. ОКНО ИГРОКА
+
 
 local PlayerFrame = Instance.new("Frame", ScreenGui)
-PlayerFrame.Size = UDim2.new(0, 220, 0, 240)
+PlayerFrame.Size = UDim2.new(0, 220, 0, 300)
 PlayerFrame.Position = UDim2.new(0.1, 280, 0.4, 0)
 PlayerFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 PlayerFrame.Visible = false
 Instance.new("UICorner", PlayerFrame)
 
-local NoclipBtn = Instance.new("TextButton", PlayerFrame)
-NoclipBtn.Size = UDim2.new(0.9, 0, 0, 35)
-NoclipBtn.Position = UDim2.new(0.05, 0, 0.75, 0) -- Расположи ниже остальных
-NoclipBtn.Text = "Проход сквозь стены: ВЫКЛ"
-NoclipBtn.BackgroundColor3 = Color_Off
-styleText(NoclipBtn, 12)
-Instance.new("UICorner", NoclipBtn)
+-- Функции создания кнопок (убедись, что они такие же)
+local function createBtn(text, pos, parent)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(0.9, 0, 0, 35)
+    btn.Position = pos
+    btn.Text = text
+    btn.BackgroundColor3 = Color_Off
+    styleText(btn, 12)
+    Instance.new("UICorner", btn)
+    return btn
+end
 
-NoclipBtn.MouseButton1Click:Connect(function()
-    noclipEnabled = not noclipEnabled
-    NoclipBtn.Text = "Проход сквозь стены: " .. (noclipEnabled and "ВКЛ" or "ВЫКЛ")
-    NoclipBtn.BackgroundColor3 = noclipEnabled and Color_On or Color_Off
-end)
-
-
-local InfJumpBtn = Instance.new("TextButton", PlayerFrame)
-InfJumpBtn.Size = UDim2.new(0.9, 0, 0, 35)
-InfJumpBtn.Position = UDim2.new(0.05, 0, 0.1, 0)
-InfJumpBtn.Text = "Прыжок: ВЫКЛ"
-InfJumpBtn.BackgroundColor3 = Color_Off
-styleText(InfJumpBtn, 12)
-Instance.new("UICorner", InfJumpBtn)
-
-local FlyBtn = Instance.new("TextButton", PlayerFrame)
-FlyBtn.Size = UDim2.new(0.9, 0, 0, 35)
-FlyBtn.Position = UDim2.new(0.05, 0, 0.3, 0)
-FlyBtn.Text = "Полет: ВЫКЛ"
-FlyBtn.BackgroundColor3 = Color_Off
-styleText(FlyBtn, 12)
-Instance.new("UICorner", FlyBtn)
+-- Создаем кнопки по порядку
+local InfJumpBtn = createBtn("Прыжок: ВЫКЛ", UDim2.new(0.05, 0, 0.05, 0), PlayerFrame)
+local FlyBtn = createBtn("Полет: ВЫКЛ", UDim2.new(0.05, 0, 0.2, 0), PlayerFrame)
 
 local FlySpeedLabel = Instance.new("TextLabel", PlayerFrame)
-FlySpeedLabel.Size = UDim2.new(0.9, 0, 0, 20)
-FlySpeedLabel.Position = UDim2.new(0.05, 0, 0.48, 0)
+FlySpeedLabel.Size = UDim2.new(0.9, 0, 0, 25)
+FlySpeedLabel.Position = UDim2.new(0.05, 0, 0.35, 0)
 FlySpeedLabel.Text = "СКОРОСТЬ ПОЛЕТА: 50"
 FlySpeedLabel.BackgroundTransparency = 1
-styleText(FlySpeedLabel, 10)
+styleText(FlySpeedLabel, 14)
 
 local AddFly = Instance.new("TextButton", PlayerFrame)
 AddFly.Size = UDim2.new(0.43, 0, 0, 30)
-AddFly.Position = UDim2.new(0.05, 0, 0.58, 0)
+AddFly.Position = UDim2.new(0.05, 0, 0.45, 0)
 AddFly.Text = "+ ПОЛЕТ"
 AddFly.BackgroundColor3 = Color_Btn
 styleText(AddFly, 12)
@@ -434,11 +419,53 @@ Instance.new("UICorner", AddFly)
 
 local SubFly = Instance.new("TextButton", PlayerFrame)
 SubFly.Size = UDim2.new(0.43, 0, 0, 30)
-SubFly.Position = UDim2.new(0.52, 0, 0.58, 0)
+SubFly.Position = UDim2.new(0.52, 0, 0.45, 0)
 SubFly.Text = "- ПОЛЕТ"
 SubFly.BackgroundColor3 = Color_Btn
 styleText(SubFly, 12)
 Instance.new("UICorner", SubFly)
+
+local NoclipBtn = createBtn("Проход сквозь стены: ВЫКЛ", UDim2.new(0.05, 0, 0.62, 0), PlayerFrame)
+local AntiAfkBtn = createBtn("Anti-AFK: ВЫКЛ", UDim2.new(0.05, 0, 0.8, 0), PlayerFrame)
+
+-- Логика Anti-AFK
+local antiAfkEnabled = false
+local VirtualUser = game:GetService("VirtualUser")
+
+AntiAfkBtn.MouseButton1Click:Connect(function()
+    antiAfkEnabled = not antiAfkEnabled
+    AntiAfkBtn.Text = "Anti-AFK: " .. (antiAfkEnabled and "ВКЛ" or "ВЫКЛ")
+    AntiAfkBtn.BackgroundColor3 = antiAfkEnabled and Color_On or Color_Off
+end)
+
+localPlayer.Idled:Connect(function()
+    if antiAfkEnabled then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end
+end)
+
+-- [[ ЛОГИКА NOCLIP ]] --
+local noclipEnabled = false
+local RunService = game:GetService("RunService")
+
+-- Функция переключения кнопки
+NoclipBtn.MouseButton1Click:Connect(function()
+    noclipEnabled = not noclipEnabled
+    NoclipBtn.Text = "Проход сквозь стены: " .. (noclipEnabled and "ВКЛ" or "ВЫКЛ")
+    NoclipBtn.BackgroundColor3 = noclipEnabled and Color_On or Color_Off
+end)
+
+-- Сам процесс прохода сквозь стены
+RunService.Stepped:Connect(function()
+    if noclipEnabled and localPlayer.Character then
+        for _, part in pairs(localPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
 
 -- [[ ЛОГИКА И СОБЫТИЯ ]] --
 
