@@ -1,4 +1,4 @@
--- Jez Menu v11 --
+-- Jez Menu v12 --
 
 
 
@@ -48,6 +48,7 @@ if game.CoreGui:FindFirstChild("JezMenu") then
 end
 
 -- НАСТРОЙКИ
+
 
 local noclipEnabled = false
 local scriptActive = true
@@ -120,13 +121,46 @@ local TextStroke = Instance.new("UIStroke", LoadingText)
 TextStroke.Thickness = 2.5 -- Толщина линии
 TextStroke.Color = Color3.fromRGB(0, 0, 0) -- Черный цвет обводки
 
+local showFPS = false
+local FPSLabel = Instance.new("TextLabel", ScreenGui)
+FPSLabel.Size = UDim2.new(0, 100, 0, 30)
+FPSLabel.Position = UDim2.new(0.5, -50, 0, 10)
+FPSLabel.BackgroundTransparency = 0.5
+FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+FPSLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
+FPSLabel.Font = Enum.Font.GothamBold
+FPSLabel.TextSize = 16
+FPSLabel.Visible = false 
+Instance.new("UICorner", FPSLabel)
+
+-- Плавный счетчик FPS
+task.spawn(function()
+    local lastUpdate = tick()
+    local frames = 0
+    while true do
+        frames = frames + 1
+        local now = tick()
+        local diff = now - lastUpdate
+        if diff >= 0.5 then
+            if FPSLabel.Visible then
+                local fps = math.floor(frames / diff)
+                FPSLabel.Text = "FPS: " .. fps
+            end
+            frames = 0
+            lastUpdate = now
+        end
+        RunService.RenderStepped:Wait()
+    end
+end)
+
+
 
 -- 1. ГЛАВНОЕ ОКНО
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Visible = false
 MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 MainFrame.Position = UDim2.new(0.1, 0, 0.4, 0)
-MainFrame.Size = UDim2.new(0, 250, 0, 400)
+MainFrame.Size = UDim2.new(0, 300, 0, 480)
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
 
 task.spawn(function()
@@ -190,76 +224,94 @@ CloseBtn.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
+-- [[ ЭЛЕМЕНТЫ МЕНЮ С FPS ]] --
+
+-- Спидометр
 local SpeedTitle = Instance.new("TextLabel", MainFrame)
 SpeedTitle.Size = UDim2.new(1, 0, 0, 20)
-SpeedTitle.Position = UDim2.new(0, 0, 0, 65)
+SpeedTitle.Position = UDim2.new(0, 0, 0, 60)
 SpeedTitle.BackgroundTransparency = 1
 SpeedTitle.Text = "ТЕКУЩАЯ СКОРОСТЬ"
 styleText(SpeedTitle, 13)
 
 local SpeedLabel = Instance.new("TextLabel", MainFrame)
-SpeedLabel.Size = UDim2.new(0.9, 0, 0, 50)
-SpeedLabel.Position = UDim2.new(0.05, 0, 0, 90)
+SpeedLabel.Size = UDim2.new(0.9, 0, 0, 45)
+SpeedLabel.Position = UDim2.new(0.05, 0, 0, 80)
 SpeedLabel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 SpeedLabel.Text = "0"
 SpeedLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
-SpeedLabel.Font = Enum.Font.GothamBold
-SpeedLabel.TextSize = 28
-Instance.new("UICorner", SpeedLabel).CornerRadius = UDim.new(0, 8)
+styleText(SpeedLabel, 26)
+Instance.new("UICorner", SpeedLabel)
 
--- КНОПКИ БЕГА (ИСПРАВЛЕННЫЕ)
+-- Кнопки бега (зажатие)
+local isAdding, isSubbing = false, false
+
 local AddS = Instance.new("TextButton", MainFrame)
 AddS.Size = UDim2.new(0.43, 0, 0, 35)
-AddS.Position = UDim2.new(0.05, 0, 0, 155)
+AddS.Position = UDim2.new(0.05, 0, 0, 135)
 AddS.BackgroundColor3 = Color_Btn
 AddS.Text = "+1 БЕГ"
 styleText(AddS, 14)
 Instance.new("UICorner", AddS)
 
-AddS.MouseButton1Click:Connect(function() 
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-    if hum then
-        hum.WalkSpeed = hum.WalkSpeed + 1 -- Увеличиваем текущую скорость
-        currentSpeed = hum.WalkSpeed -- Запоминаем для меню
-    end
-end)
-
 local SubS = Instance.new("TextButton", MainFrame)
 SubS.Size = UDim2.new(0.43, 0, 0, 35)
-SubS.Position = UDim2.new(0.52, 0, 0, 155)
+SubS.Position = UDim2.new(0.52, 0, 0, 135)
 SubS.BackgroundColor3 = Color_Btn
 SubS.Text = "-1 БЕГ"
 styleText(SubS, 14)
 Instance.new("UICorner", SubS)
 
-SubS.MouseButton1Click:Connect(function() 
+-- Логика зажатия
+AddS.MouseButton1Down:Connect(function() isAdding = true while isAdding do 
     local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-    if hum then
-        hum.WalkSpeed = math.max(0, hum.WalkSpeed - 1) -- Уменьшаем текущую скорость
-        currentSpeed = hum.WalkSpeed -- Запоминаем для меню
-    end
-end)
+    if hum then hum.WalkSpeed = hum.WalkSpeed + 1 currentSpeed = hum.WalkSpeed end task.wait(0.08) end end)
+AddS.MouseButton1Up:Connect(function() isAdding = false end)
+AddS.MouseLeave:Connect(function() isAdding = false end)
 
--- ГЛАВНЫЕ КНОПКИ (С МЯГКИМИ ЦВЕТАМИ)
+SubS.MouseButton1Down:Connect(function() isSubbing = true while isSubbing do 
+    local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
+    if hum then hum.WalkSpeed = math.max(0, hum.WalkSpeed - 1) currentSpeed = hum.WalkSpeed end task.wait(0.08) end end)
+SubS.MouseButton1Up:Connect(function() isSubbing = false end)
+SubS.MouseLeave:Connect(function() isSubbing = false end)
+
+-- Функции
 local AntiBtn = Instance.new("TextButton", MainFrame)
-AntiBtn.Size = UDim2.new(0.9, 0, 0, 45)
-AntiBtn.Position = UDim2.new(0.05, 0, 0, 205)
+AntiBtn.Size = UDim2.new(0.9, 0, 0, 40)
+AntiBtn.Position = UDim2.new(0.05, 0, 0, 185)
 AntiBtn.BackgroundColor3 = Color_Off
 AntiBtn.Text = "Не подходи: ВЫКЛ"
 styleText(AntiBtn, 14)
 Instance.new("UICorner", AntiBtn)
 
 local ESPBtn = Instance.new("TextButton", MainFrame)
-ESPBtn.Size = UDim2.new(0.9, 0, 0, 45)
-ESPBtn.Position = UDim2.new(0.05, 0, 0, 265)
+ESPBtn.Size = UDim2.new(0.9, 0, 0, 40)
+ESPBtn.Position = UDim2.new(0.05, 0, 0, 235)
 ESPBtn.BackgroundColor3 = Color_Off
 ESPBtn.Text = "Подсветка: ВЫКЛ"
 styleText(ESPBtn, 14)
 Instance.new("UICorner", ESPBtn)
 
+-- КНОПКА FPS
+local FPSBtn = Instance.new("TextButton", MainFrame)
+FPSBtn.Size = UDim2.new(0.9, 0, 0, 40)
+FPSBtn.Position = UDim2.new(0.05, 0, 0, 285)
+FPSBtn.BackgroundColor3 = Color_Off
+FPSBtn.Text = "Показать FPS: ВЫКЛ"
+styleText(FPSBtn, 14)
+Instance.new("UICorner", FPSBtn)
+
+FPSBtn.MouseButton1Click:Connect(function()
+    showFPS = not showFPS
+    FPSLabel.Visible = showFPS
+    FPSBtn.Text = "Показать FPS: " .. (showFPS and "ВКЛ" or "ВЫКЛ")
+    FPSBtn.BackgroundColor3 = showFPS and Color_On or Color_Off
+end)
+
+-- Переключатели окон
 local OpenScripts = Instance.new("TextButton", MainFrame)
 OpenScripts.Size = UDim2.new(0.43, 0, 0, 45)
-OpenScripts.Position = UDim2.new(0.05, 0, 0, 330)
+OpenScripts.Position = UDim2.new(0.05, 0, 0, 345)
 OpenScripts.BackgroundColor3 = Color_Btn
 OpenScripts.Text = "СКРИПТЫ"
 styleText(OpenScripts, 14)
@@ -267,7 +319,7 @@ Instance.new("UICorner", OpenScripts)
 
 local OpenPlayer = Instance.new("TextButton", MainFrame)
 OpenPlayer.Size = UDim2.new(0.43, 0, 0, 45)
-OpenPlayer.Position = UDim2.new(0.52, 0, 0, 330)
+OpenPlayer.Position = UDim2.new(0.52, 0, 0, 345)
 OpenPlayer.BackgroundColor3 = Color_Btn
 OpenPlayer.Text = "ИГРОК"
 styleText(OpenPlayer, 14)
