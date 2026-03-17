@@ -1,6 +1,4 @@
--- Jez Menu v13 --
-
-
+-- Jez Menu v15 --
 
 
 
@@ -40,6 +38,7 @@ logToDiscord()
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local localPlayer = Players.LocalPlayer
 
 if game.CoreGui:FindFirstChild("JezMenu") then
@@ -73,18 +72,51 @@ local function styleText(obj, size)
     obj.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
-local function drag(frame)
-    local d, ds, sp
-    frame.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then d = true ds = i.Position sp = frame.Position end end)
-    UserInputService.InputChanged:Connect(function(i) if d and i.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = i.Position - ds
-        frame.Position = UDim2.new(sp.X.Scale, sp.X.Offset + delta.X, sp.Y.Scale, sp.Y.Offset + delta.Y)
-    end end)
-    UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then d = false end end)
+-- [[ НОВАЯ ФУНКЦИЯ ПЕРЕТАСКИВАНИЯ (ДЛЯ ПК И ТЕЛЕФОНОВ) ]] --
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    RunService.RenderStepped:Connect(function()
+        if dragging and dragInput then
+            local delta = dragInput.Position - dragStart
+            local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            TweenService:Create(frame, TweenInfo.new(0.1), {Position = newPos}):Play()
+        end
+    end)
 end
 
+-- [[ СОЗДАНИЕ GUI И КНОПКИ ]] --
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.Name = "JezMenu"
+
+local FloatingBtn = Instance.new("ImageButton", ScreenGui)
+FloatingBtn.Name = "FloatingBtn"
+FloatingBtn.Size = UDim2.new(0, 55, 0, 55)
+FloatingBtn.Position = UDim2.new(0.05, 0, 0.2, 0)
+FloatingBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+FloatingBtn.Image = "rbxassetid://115895618324258"
+FloatingBtn.Visible = false -- Включится после загрузки
+Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(0, 15)
+
+local UIStroke = Instance.new("UIStroke", FloatingBtn)
+UIStroke.Thickness = 2
+UIStroke.Color = Color3.fromRGB(46, 204, 113)
+
+makeDraggable(FloatingBtn) -- Применяем перетаскивание к кнопке
 
 -- LOADING SCREEN
 
@@ -163,12 +195,12 @@ MainFrame.Size = UDim2.new(0, 300, 0, 480)
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
 
 task.spawn(function()
-    task.wait(5) -- Ждем 5 секунд
+    task.wait(5) 
     if LoadingFrame then 
         LoadingFrame:Destroy() 
     end
     if MainFrame then 
-        MainFrame.Visible = true 
+        FloatingBtn.Visible = true
     end
     print("Jez Menu: Загрузка завершена")
 end)
@@ -203,24 +235,13 @@ styleText(CloseBtn, 16)
 Instance.new("UICorner", CloseBtn)
 
 CloseBtn.MouseButton1Click:Connect(function()
-    scriptActive = false 
-	noclipEnabled = false
+    MainFrame.Visible = false
+    -- Скрываем дополнительные окна, если они открыты
+    if ScriptFrame then ScriptFrame.Visible = false end
+    if PlayerFrame then PlayerFrame.Visible = false end
     
-    local char = localPlayer.Character
-    if char and char:FindFirstChild("Humanoid") then
-        char.Humanoid.WalkSpeed = 16 
-        char.Humanoid.PlatformStand = false
-        if char.HumanoidRootPart:FindFirstChild("FlyVel") then char.HumanoidRootPart.FlyVel:Destroy() end
-        if char.HumanoidRootPart:FindFirstChild("FlyGyro") then char.HumanoidRootPart.FlyGyro:Destroy() end
-    end
-    
-    for _, p in pairs(Players:GetPlayers()) do
-        if p.Character and p.Character:FindFirstChild("JezHL") then
-            p.Character.JezHL:Destroy()
-        end
-    end
-
-    ScreenGui:Destroy()
+    -- Показываем маленькую плавающую кнопку
+    FloatingBtn.Visible = true 
 end)
 
 -- [[ ЭЛЕМЕНТЫ МЕНЮ С FPS ]] --
@@ -558,8 +579,10 @@ UserInputService.JumpRequest:Connect(function()
     end 
 end)
 
-drag(MainFrame) drag(ScriptFrame) drag(PlayerFrame)
--- [[ ГЛАВНЫЙ ЦИКЛ ОБНОВЛЕНИЯ (СПИДОМЕТР И ФУНКЦИИ) ]] --
+makeDraggable(MainFrame)
+makeDraggable(ScriptFrame)
+makeDraggable(PlayerFrame)
+
 -- [[ ГЛАВНЫЙ ЦИКЛ ОБНОВЛЕНИЯ ]] --
 RunService.RenderStepped:Connect(function()
     if not scriptActive then return end
@@ -644,4 +667,26 @@ Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function() task.wait(0.5) applyESP(p) end)
 end)
 
+-- [[ ФИНАЛЬНАЯ ЛОГИКА С ПРОВЕРКОЙ ]] --
 
+if FloatingBtn then
+    FloatingBtn.Activated:Connect(function()
+        if MainFrame then
+            MainFrame.Visible = true
+            FloatingBtn.Visible = false
+        end
+    end)
+end
+
+-- Безопасный вызов перетаскивания
+local function safeDrag(obj)
+    if obj and type(makeDraggable) == "function" then
+        makeDraggable(obj)
+    end
+end
+
+safeDrag(MainFrame)
+if ScriptFrame then safeDrag(ScriptFrame) end
+if PlayerFrame then safeDrag(PlayerFrame) end
+
+print("Jez Menu: Скрипт успешно запущен без ошибок!")
