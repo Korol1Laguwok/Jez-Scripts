@@ -1,4 +1,4 @@
--- Jez Menu v15 --
+-- Jez Menu v16 --
 
 
 
@@ -411,14 +411,13 @@ StatusLabel.Text = "" -- По умолчанию пусто
 styleText(StatusLabel, 12)
 StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113) -- Зеленый цвет успеха
 
--- 3. ОКНО ИГРОКА (ИСПРАВЛЕННЫЙ РАЗМЕР И ПОЗИЦИИ)
+-- 3. ОКНО ИГРОКА
 local PlayerFrame = Instance.new("Frame", ScreenGui)
 PlayerFrame.Size = UDim2.new(0, 220, 0, 400) 
 PlayerFrame.Position = UDim2.new(0.1, 280, 0.4, 0)
 PlayerFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-PlayerFrame.Visible = false
+PlayerFrame.Visible = false -- По умолчанию закрыто
 Instance.new("UICorner", PlayerFrame)
-
 
 local function createBtn(text, pos, parent)
     local btn = Instance.new("TextButton", parent)
@@ -431,14 +430,13 @@ local function createBtn(text, pos, parent)
     return btn
 end
 
-
+-- Кнопки игрока
 local InfJumpBtn = createBtn("Прыжок: ВЫКЛ", UDim2.new(0.05, 0, 0.05, 0), PlayerFrame)
-local FlyBtn    = createBtn("Полет: ВЫКЛ", UDim2.new(0.05, 0, 0.17, 0), PlayerFrame)
-
+local FlyBtn     = createBtn("Полет: ВЫКЛ", UDim2.new(0.05, 0, 0.17, 0), PlayerFrame)
 
 local FlySpeedLabel = Instance.new("TextLabel", PlayerFrame)
 FlySpeedLabel.Size = UDim2.new(0.9, 0, 0, 25)
-FlySpeedLabel.Position = UDim2.new(0.05, 0, 0.28, 0) -- Подняли чуть выше
+FlySpeedLabel.Position = UDim2.new(0.05, 0, 0.28, 0)
 FlySpeedLabel.Text = "СКОРОСТЬ ПОЛЕТА: 50"
 FlySpeedLabel.BackgroundTransparency = 1
 styleText(FlySpeedLabel, 14)
@@ -461,7 +459,134 @@ Instance.new("UICorner", SubFly)
 
 local NoclipBtn  = createBtn("Сквозь стены: ВЫКЛ", UDim2.new(0.05, 0, 0.48, 0), PlayerFrame)
 local AntiAfkBtn = createBtn("Anti-AFK: ВЫКЛ", UDim2.new(0.05, 0, 0.60, 0), PlayerFrame)
-local AimbotBtn  = createBtn("Aimbot: ВЫКЛ", UDim2.new(0.05, 0, 0.72, 0), PlayerFrame)
+
+-- Создаем простую кнопку запуска
+local AimbotBtn = createBtn("ЗАПУСТИТЬ AIMBOT", UDim2.new(0.05, 0, 0.72, 0), PlayerFrame)
+
+-- Создаем кнопку в окне PlayerFrame
+local AimbotBtn = createBtn("ЗАПУСТИТЬ AIMBOT", UDim2.new(0.05, 0, 0.72, 0), PlayerFrame)
+
+AimbotBtn.MouseButton1Click:Connect(function()
+    -- Визуальное подтверждение нажатия
+    AimbotBtn.Text = "ЗАГРУЗКА..."
+    
+    task.spawn(function()
+        -- НИЖЕ ТВОЙ СКРИПТ БЕЗ ИЗМЕНЕНИЙ:
+        
+        --// Cache
+        local loadstring, game, getgenv, setclipboard = loadstring, game, getgenv, setclipboard
+
+        --// Loaded check
+        if getgenv().Aimbot then 
+            AimbotBtn.Text = "УЖЕ ЗАПУЩЕН"
+            return 
+        end
+
+        --// Load Aimbot V2 (Raw)
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Exunys/Aimbot-V2/main/Resources/Scripts/Raw%20Main.lua"))()
+
+        --// Variables
+        local Aimbot = getgenv().Aimbot
+        local Settings, FOVSettings, Functions = Aimbot.Settings, Aimbot.FOVSettings, Aimbot.Functions
+
+        -- Устанавливаем клавишу X
+        Settings.TriggerKey = "X"
+
+        local Library = loadstring(game:GetObjects("rbxassetid://7657867786")[1].Source)()
+
+        local Parts = {"Head", "HumanoidRootPart", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg", "LeftHand", "RightHand", "LeftLowerArm", "RightLowerArm", "LeftUpperArm", "RightUpperArm", "LeftFoot", "LeftLowerLeg", "UpperTorso", "LeftUpperLeg", "RightFoot", "RightLowerLeg", "LowerTorso", "RightUpperLeg"}
+
+        --// Frame
+        Library.UnloadCallback = Functions.Exit
+
+        local MainFrame = Library:CreateWindow({
+            Name = "Aimbot V2 | Red & Black",
+            Themeable = {
+                Image = "", -- Убрали картинку
+                Info = "Hotkey: X",
+                Credit = false
+            },
+            Background = "",
+            -- ТЕМА: ЧЕРНО-КРАСНАЯ
+            Theme = [[{"__Designer.Colors.section":"FF0000","__Designer.Colors.topGradient":"000000","__Designer.Settings.ShowHideKey":"Enum.KeyCode.RightShift","__Designer.Colors.otherElementText":"990000","__Designer.Colors.hoveredOptionBottom":"220000","__Designer.Background.ImageAssetID":"","__Designer.Colors.unhoveredOptionTop":"110000","__Designer.Colors.innerBorder":"1A1A1A","__Designer.Colors.unselectedOption":"330000","__Designer.Background.UseBackgroundImage":false,"__Designer.Files.WorkspaceFile":"Aimbot V2","__Designer.Colors.main":"FF0000","__Designer.Colors.outerBorder":"000000","__Designer.Background.ImageColor":"000000","__Designer.Colors.tabText":"FFFFFF","__Designer.Colors.elementBorder":"1A1A1A","__Designer.Colors.sectionBackground":"050505","__Designer.Colors.selectedOption":"FF0000","__Designer.Colors.background":"000000","__Designer.Colors.bottomGradient":"050000","__Designer.Background.ImageTransparency":100,"__Designer.Colors.hoveredOptionTop":"330000","__Designer.Colors.elementText":"FF0000","__Designer.Colors.unhoveredOptionBottom":"110000"}]]
+        })
+
+        --// Tabs
+        local SettingsTab = MainFrame:CreateTab({ Name = "Settings" })
+        local FOVSettingsTab = MainFrame:CreateTab({ Name = "FOV Settings" })
+        local FunctionsTab = MainFrame:CreateTab({ Name = "Functions" })
+
+        --// Sections
+        local Values = SettingsTab:CreateSection({ Name = "Aimbot Values" })
+        local Checks = SettingsTab:CreateSection({ Name = "Checks" })
+        local FOV_Values = FOVSettingsTab:CreateSection({ Name = "FOV Values" })
+        local FunctionsSection = FunctionsTab:CreateSection({ Name = "Functions" })
+
+        -- Settings
+        Values:AddToggle({
+            Name = "Enabled",
+            Value = Settings.Enabled,
+            Callback = function(New) Settings.Enabled = New end
+        })
+
+        Values:AddTextbox({ 
+            Name = "Hotkey",
+            Value = "X",
+            Callback = function(New) Settings.TriggerKey = New end
+        })
+
+        Values:AddSlider({
+            Name = "Sensitivity",
+            Value = Settings.Sensitivity,
+            Min = 0, Max = 1, Decimals = 2,
+            Callback = function(New) Settings.Sensitivity = New end
+        })
+
+        -- Checks
+        Checks:AddToggle({
+            Name = "Team Check",
+            Value = Settings.TeamCheck,
+            Callback = function(New) Settings.TeamCheck = New end
+        })
+
+        Checks:AddToggle({
+            Name = "Wall Check",
+            Value = Settings.WallCheck,
+            Callback = function(New) Settings.WallCheck = New end
+        })
+
+        -- FOV
+        FOV_Values:AddToggle({
+            Name = "Enabled",
+            Value = FOVSettings.Enabled,
+            Callback = function(New) FOVSettings.Enabled = New end
+        })
+
+        FOV_Values:AddSlider({
+            Name = "Amount",
+            Value = FOVSettings.Amount,
+            Min = 10, Max = 300,
+            Callback = function(New) FOVSettings.Amount = New end
+        })
+
+        -- Functions
+        FunctionsSection:AddButton({
+            Name = "Reset Settings",
+            Callback = function() Functions.ResetSettings() end
+        })
+
+        FunctionsSection:AddButton({
+            Name = "Exit",
+            Callback = function() Library:Unload() end
+        })
+
+        -- Принудительный показ первой вкладки
+        SettingsTab:Show()
+        
+        AimbotBtn.Text = "AIMBOT ЗАПУЩЕН"
+    end)
+end)
+
 
 -- [[ ЛОГИКА ВЕРСИИ ВНИЗУ ]] --
 local VersionLabel = Instance.new("TextLabel", PlayerFrame) -- Добавим и сюда для красоты
