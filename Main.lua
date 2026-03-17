@@ -1,4 +1,8 @@
--- Jez Menu v15 --
+-- Jez Menu v14.5 --
+
+
+
+
 
 
 
@@ -345,6 +349,18 @@ OpenPlayer.Text = "ИГРОК"
 styleText(OpenPlayer, 14)
 Instance.new("UICorner", OpenPlayer)
 
+-- [[ ДОБАВЛЕНИЕ ВЕРСИИ ВНИЗУ ]] --
+local VersionLabel = Instance.new("TextLabel", MainFrame)
+VersionLabel.Size = UDim2.new(1, 0, 0, 20)
+VersionLabel.Position = UDim2.new(0, 0, 1, -25)
+VersionLabel.BackgroundTransparency = 1
+VersionLabel.Text = "v14.5" -- версия
+
+VersionLabel.TextColor3 = Color3.fromRGB(180, 180, 180) -- Светло-серый
+VersionLabel.Font = Enum.Font.Gotham
+VersionLabel.TextSize = 10
+VersionLabel.TextTransparency = 0.5 -- Оставляем полупрозрачность для стиля
+
 -- ЛОГИКА КНОПОК
 AntiBtn.MouseButton1Click:Connect(function()
     antiApproach = not antiApproach
@@ -543,8 +559,36 @@ SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     end
 end)
 
-OpenScripts.MouseButton1Click:Connect(function() ScriptFrame.Visible = not ScriptFrame.Visible PlayerFrame.Visible = false end)
-OpenPlayer.MouseButton1Click:Connect(function() PlayerFrame.Visible = not PlayerFrame.Visible ScriptFrame.Visible = false end)
+-- Функция для умного позиционирования окон (чтобы не накладывались)
+local function positionSideFrame(sideFrame)
+    if MainFrame.Visible then
+        -- Берем текущие координаты MainFrame и ставим окно справа (+305 пикселей)
+        sideFrame.Position = UDim2.new(
+            MainFrame.Position.X.Scale, 
+            MainFrame.Position.X.Offset + 305, 
+            MainFrame.Position.Y.Scale, 
+            MainFrame.Position.Y.Offset
+        )
+    end
+end
+
+-- Кнопка открытия Скриптов
+OpenScripts.MouseButton1Click:Connect(function()
+    ScriptFrame.Visible = not ScriptFrame.Visible
+    PlayerFrame.Visible = false -- Скрываем другое окно
+    if ScriptFrame.Visible then
+        positionSideFrame(ScriptFrame)
+    end
+end)
+
+-- Кнопка открытия Игрока
+OpenPlayer.MouseButton1Click:Connect(function()
+    PlayerFrame.Visible = not PlayerFrame.Visible
+    ScriptFrame.Visible = false -- Скрываем другое окно
+    if PlayerFrame.Visible then
+        positionSideFrame(PlayerFrame)
+    end
+end)
 
 InfJumpBtn.MouseButton1Click:Connect(function()
     infJumpEnabled = not infJumpEnabled
