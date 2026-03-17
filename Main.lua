@@ -1,6 +1,4 @@
--- Jez Menu v14.5 --
-
-
+-- Jez Menu v15 --
 
 
 
@@ -354,7 +352,7 @@ local VersionLabel = Instance.new("TextLabel", MainFrame)
 VersionLabel.Size = UDim2.new(1, 0, 0, 20)
 VersionLabel.Position = UDim2.new(0, 0, 1, -25)
 VersionLabel.BackgroundTransparency = 1
-VersionLabel.Text = "v14.5" -- версия
+VersionLabel.Text = "v15" -- версия
 
 VersionLabel.TextColor3 = Color3.fromRGB(180, 180, 180) -- Светло-серый
 VersionLabel.Font = Enum.Font.Gotham
@@ -413,17 +411,15 @@ StatusLabel.Text = "" -- По умолчанию пусто
 styleText(StatusLabel, 12)
 StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113) -- Зеленый цвет успеха
 
--- 3. ОКНО ИГРОКА
-
-
+-- 3. ОКНО ИГРОКА (ИСПРАВЛЕННЫЙ РАЗМЕР И ПОЗИЦИИ)
 local PlayerFrame = Instance.new("Frame", ScreenGui)
-PlayerFrame.Size = UDim2.new(0, 220, 0, 300)
+PlayerFrame.Size = UDim2.new(0, 220, 0, 400) 
 PlayerFrame.Position = UDim2.new(0.1, 280, 0.4, 0)
 PlayerFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 PlayerFrame.Visible = false
 Instance.new("UICorner", PlayerFrame)
 
--- Функции создания кнопок (убедись, что они такие же)
+
 local function createBtn(text, pos, parent)
     local btn = Instance.new("TextButton", parent)
     btn.Size = UDim2.new(0.9, 0, 0, 35)
@@ -435,20 +431,21 @@ local function createBtn(text, pos, parent)
     return btn
 end
 
--- Создаем кнопки по порядку
+
 local InfJumpBtn = createBtn("Прыжок: ВЫКЛ", UDim2.new(0.05, 0, 0.05, 0), PlayerFrame)
-local FlyBtn = createBtn("Полет: ВЫКЛ", UDim2.new(0.05, 0, 0.2, 0), PlayerFrame)
+local FlyBtn    = createBtn("Полет: ВЫКЛ", UDim2.new(0.05, 0, 0.17, 0), PlayerFrame)
+
 
 local FlySpeedLabel = Instance.new("TextLabel", PlayerFrame)
 FlySpeedLabel.Size = UDim2.new(0.9, 0, 0, 25)
-FlySpeedLabel.Position = UDim2.new(0.05, 0, 0.35, 0)
+FlySpeedLabel.Position = UDim2.new(0.05, 0, 0.28, 0) -- Подняли чуть выше
 FlySpeedLabel.Text = "СКОРОСТЬ ПОЛЕТА: 50"
 FlySpeedLabel.BackgroundTransparency = 1
 styleText(FlySpeedLabel, 14)
 
 local AddFly = Instance.new("TextButton", PlayerFrame)
 AddFly.Size = UDim2.new(0.43, 0, 0, 30)
-AddFly.Position = UDim2.new(0.05, 0, 0.45, 0)
+AddFly.Position = UDim2.new(0.05, 0, 0.36, 0)
 AddFly.Text = "+ ПОЛЕТ"
 AddFly.BackgroundColor3 = Color_Btn
 styleText(AddFly, 12)
@@ -456,14 +453,26 @@ Instance.new("UICorner", AddFly)
 
 local SubFly = Instance.new("TextButton", PlayerFrame)
 SubFly.Size = UDim2.new(0.43, 0, 0, 30)
-SubFly.Position = UDim2.new(0.52, 0, 0.45, 0)
+SubFly.Position = UDim2.new(0.52, 0, 0.36, 0)
 SubFly.Text = "- ПОЛЕТ"
 SubFly.BackgroundColor3 = Color_Btn
 styleText(SubFly, 12)
 Instance.new("UICorner", SubFly)
 
-local NoclipBtn = createBtn("Проход сквозь стены: ВЫКЛ", UDim2.new(0.05, 0, 0.62, 0), PlayerFrame)
-local AntiAfkBtn = createBtn("Anti-AFK: ВЫКЛ", UDim2.new(0.05, 0, 0.8, 0), PlayerFrame)
+local NoclipBtn  = createBtn("Сквозь стены: ВЫКЛ", UDim2.new(0.05, 0, 0.48, 0), PlayerFrame)
+local AntiAfkBtn = createBtn("Anti-AFK: ВЫКЛ", UDim2.new(0.05, 0, 0.60, 0), PlayerFrame)
+local AimbotBtn  = createBtn("Aimbot: ВЫКЛ", UDim2.new(0.05, 0, 0.72, 0), PlayerFrame)
+
+-- [[ ЛОГИКА ВЕРСИИ ВНИЗУ ]] --
+local VersionLabel = Instance.new("TextLabel", PlayerFrame) -- Добавим и сюда для красоты
+VersionLabel.Size = UDim2.new(1, 0, 0, 20)
+VersionLabel.Position = UDim2.new(0, 0, 1, -20)
+VersionLabel.BackgroundTransparency = 1
+VersionLabel.Text = "v15"
+VersionLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+VersionLabel.Font = Enum.Font.Gotham
+VersionLabel.TextSize = 10
+VersionLabel.TextTransparency = 0.5
 
 -- Логика Anti-AFK
 local antiAfkEnabled = false
@@ -732,5 +741,63 @@ end
 safeDrag(MainFrame)
 if ScriptFrame then safeDrag(ScriptFrame) end
 if PlayerFrame then safeDrag(PlayerFrame) end
+
+-- [[ ЛОГИКА AIMBOT (АКТИВАЦИЯ НА X) ]] --
+local aimbotEnabled = false
+local aimKeyHeld = false -- Переменная для отслеживания нажатия X
+local camera = workspace.CurrentCamera
+
+-- Отслеживаем нажатие и отпускание клавиши X
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.X then
+        aimKeyHeld = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.X then
+        aimKeyHeld = false
+    end
+end)
+
+-- Функция для поиска ближайшего игрока к центру экрана
+local function getClosestPlayer()
+    local closest = nil
+    local shortestDistance = math.huge
+
+    for _, p in pairs(game:GetService("Players"):GetPlayers()) do
+        if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            local pos, onScreen = camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local distance = (Vector2.new(pos.X, pos.Y) - Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)).Magnitude
+                if distance < shortestDistance then
+                    closest = p.Character.HumanoidRootPart
+                    shortestDistance = distance
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- Кнопка в меню (Включает саму возможность аима)
+AimbotBtn.MouseButton1Click:Connect(function()
+    aimbotEnabled = not aimbotEnabled
+    AimbotBtn.Text = "Aimbot: " .. (aimbotEnabled and "ВКЛ (Зажми X)" or "ВЫКЛ")
+    AimbotBtn.BackgroundColor3 = aimbotEnabled and Color_On or Color_Off
+end)
+
+-- Основной цикл наведения
+RunService.RenderStepped:Connect(function()
+    -- Работает ТОЛЬКО если включено в меню И зажата клавиша X
+    if aimbotEnabled and aimKeyHeld then
+        local target = getClosestPlayer()
+        if target then
+            camera.CFrame = CFrame.new(camera.CFrame.Position, target.Position)
+        end
+    end
+end)
+
+print("Jez Menu: Аимбот на X настроен!")
 
 print("Jez Menu: Скрипт успешно запущен без ошибок!")
