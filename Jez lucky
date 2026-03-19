@@ -1,0 +1,142 @@
+-- Jez Lucky  --
+
+
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local Color_BG = Color3.fromRGB(12, 12, 12)
+local Color_Main = Color3.fromRGB(46, 204, 113)
+local Color_On = Color3.fromRGB(39, 174, 96)
+local Color_Stop = Color3.fromRGB(200, 50, 50)
+local Color_Clear = Color3.fromRGB(60, 60, 60)
+
+local blockNames = {"SpawnGalaxyBlock", "SpawnDiamondBlock", "SpawnVoidBlock", "SpawnRainbowBlock"}
+
+local LuckyGui = Instance.new("ScreenGui")
+LuckyGui.Name = HttpService:GenerateGUID(false)
+LuckyGui.Parent = game:GetService("CoreGui")
+
+local LuckyFrame = Instance.new("Frame", LuckyGui)
+LuckyFrame.Size = UDim2.new(0, 300, 0, 310) -- Увеличил высоту для новой кнопки
+LuckyFrame.Position = UDim2.new(0, 20, 0.5, 50)
+LuckyFrame.BackgroundColor3 = Color_BG
+LuckyFrame.Active = true
+LuckyFrame.Draggable = true
+Instance.new("UICorner", LuckyFrame).CornerRadius = UDim.new(0, 10)
+
+-- КРЕСТИК
+local CloseBtn = Instance.new("TextButton", LuckyFrame)
+CloseBtn.Size = UDim2.new(0, 35, 0, 35)
+CloseBtn.Position = UDim2.new(1, -40, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+CloseBtn.TextSize = 26
+CloseBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+-- ЗАГОЛОВОК
+local Title = Instance.new("TextLabel", LuckyFrame)
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.Text = "JEZ LUCKY"
+Title.TextColor3 = Color_Main
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 24
+
+-- ВВОД
+local AmountInput = Instance.new("TextBox", LuckyFrame)
+AmountInput.Size = UDim2.new(0, 260, 0, 45)
+AmountInput.Position = UDim2.new(0.5, -130, 0, 60)
+AmountInput.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+AmountInput.Text = "100"
+AmountInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+AmountInput.Font = Enum.Font.GothamBold
+AmountInput.TextSize = 22
+Instance.new("UICorner", AmountInput).CornerRadius = UDim.new(0, 8)
+
+-- КНОПКА ЗАПУСКА
+local SpawnBtn = Instance.new("TextButton", LuckyFrame)
+SpawnBtn.Size = UDim2.new(0, 260, 0, 55)
+SpawnBtn.Position = UDim2.new(0.5, -130, 0, 120)
+SpawnBtn.BackgroundColor3 = Color_On
+SpawnBtn.Text = "ЗАПУСТИТЬ"
+SpawnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpawnBtn.Font = Enum.Font.GothamBold
+SpawnBtn.TextSize = 20
+Instance.new("UICorner", SpawnBtn).CornerRadius = UDim.new(0, 8)
+
+-- КНОПКА ОЧИСТКИ (НОВАЯ)
+local ClearBtn = Instance.new("TextButton", LuckyFrame)
+ClearBtn.Size = UDim2.new(0, 260, 0, 45)
+ClearBtn.Position = UDim2.new(0.5, -130, 0, 185)
+ClearBtn.BackgroundColor3 = Color_Clear
+ClearBtn.Text = "ОЧИСТИТЬ ВСЁ"
+ClearBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+ClearBtn.Font = Enum.Font.GothamBold
+ClearBtn.TextSize = 18
+Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 8)
+
+-- КНОПКА СТОП
+local StopBtn = Instance.new("TextButton", LuckyFrame)
+StopBtn.Size = UDim2.new(0, 260, 0, 45)
+StopBtn.Position = UDim2.new(0.5, -130, 0, 245)
+StopBtn.BackgroundColor3 = Color_Stop
+StopBtn.Text = "СТОП"
+StopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopBtn.Font = Enum.Font.GothamBold
+StopBtn.TextSize = 18
+StopBtn.Visible = false
+Instance.new("UICorner", StopBtn).CornerRadius = UDim.new(0, 8)
+
+-- ЛОГИКА
+local stopRequested = false
+local isSpawning = false
+
+CloseBtn.MouseButton1Click:Connect(function() LuckyGui:Destroy() end)
+
+-- ФУНКЦИЯ ОЧИСТКИ
+ClearBtn.MouseButton1Click:Connect(function()
+    local count = 0
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        -- Ищем объекты, в которых есть слово Block или Lucky
+        if obj:IsA("BasePart") and (obj.Name:find("Block") or obj.Name:find("Lucky")) then
+            obj:Destroy()
+            count = count + 1
+        end
+    end
+    ClearBtn.Text = "УДАЛЕНО: " .. count
+    task.wait(1.5)
+    ClearBtn.Text = "ОЧИСТИТЬ ВСЁ"
+end)
+
+SpawnBtn.MouseButton1Click:Connect(function()
+    if isSpawning then return end
+    local count = tonumber(AmountInput.Text)
+    if not count or count <= 0 then return end
+
+    isSpawning = true
+    stopRequested = false
+    StopBtn.Visible = true
+    
+    task.spawn(function()
+        for i = 1, count do
+            if stopRequested then break end
+            local blockIndex = (i % #blockNames) + 1
+            local Remote = ReplicatedStorage:FindFirstChild(blockNames[blockIndex])
+            if Remote then
+                Remote:FireServer()
+                SpawnBtn.Text = i .. " / " .. count
+            end
+            if i % 25 == 0 then task.wait(0.05) end
+        end
+        SpawnBtn.Text = "ГОТОВО!"
+        task.wait(2)
+        SpawnBtn.Text = "ЗАПУСТИТЬ"
+        StopBtn.Visible = false
+        isSpawning = false
+    end)
+end)
+
+StopBtn.MouseButton1Click:Connect(function() stopRequested = true end)
