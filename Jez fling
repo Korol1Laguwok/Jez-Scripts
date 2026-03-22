@@ -1,0 +1,294 @@
+
+
+
+
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = Player:WaitForChild("PlayerGui") -- Добавь эту строку!
+ScreenGui.ResetOnSpawn = false
+
+-- === ОБНОВЛЕННЫЙ ИНТЕРФЕЙС (ШИРЕ И РОВНЕЕ) ===
+local Main = Instance.new("Frame", ScreenGui)
+Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+-- Сместили Y на -250, чтобы при высоте 500 окно было ровно по центру
+Main.Position = UDim2.new(0.5, -225, 0.5, -250) 
+Main.Size = UDim2.new(0, 450, 0, 500) -- Высота теперь 500 (была 350)
+Main.Active = true
+Main.Draggable = true
+
+local MainCorner = Instance.new("UICorner", Main)
+MainCorner.CornerRadius = UDim.new(0, 10)
+
+local Stroke = Instance.new("UIStroke", Main)
+Stroke.Color = Color3.fromRGB(0, 180, 0)
+Stroke.Thickness = 2
+
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.BackgroundTransparency = 1
+Title.Text = "JEZ FLING LIST"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 22
+
+-- === КНОПКА ЗАКРЫТИЯ (КРЕСТИК) ===
+local CloseBtn = Instance.new("TextButton", Main)
+CloseBtn.Size = UDim2.new(0, 35, 0, 35)
+CloseBtn.Position = UDim2.new(1, -40, 0, 7)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+CloseBtn.Text = "×" -- Символ крестика
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.TextSize = 25
+CloseBtn.AutoButtonColor = false
+
+local CloseCorner = Instance.new("UICorner", CloseBtn)
+CloseCorner.CornerRadius = UDim.new(0, 6)
+
+local CloseStroke = Instance.new("UIStroke", CloseBtn)
+CloseStroke.Color = Color3.fromRGB(150, 0, 0) -- Темно-красная обводка
+CloseStroke.Thickness = 1.5
+
+-- Логика закрытия
+CloseBtn.MouseEnter:Connect(function()
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+end)
+
+CloseBtn.MouseLeave:Connect(function()
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy() -- Полностью удаляет меню из игры
+end)
+
+local Scroll = Instance.new("ScrollingFrame", Main)
+-- Увеличили область скролла под новый размер окна
+Scroll.Size = UDim2.new(1, -30, 1, -70) 
+Scroll.Position = UDim2.new(0, 15, 0, 55)
+Scroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Scroll.BorderSizePixel = 0
+Scroll.ScrollBarThickness = 4
+Scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 180, 0)
+Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+
+-- === ПОДПИСЬ АВТОРА ===
+local AuthorTag = Instance.new("TextLabel", Main)
+AuthorTag.Size = UDim2.new(0, 100, 0, 20)
+AuthorTag.Position = UDim2.new(1, -110, 1, -25) -- Правый нижний угол
+AuthorTag.BackgroundTransparency = 1
+AuthorTag.Text = "by Jezafes"
+AuthorTag.TextColor3 = Color3.fromRGB(100, 100, 100) -- Спокойный серый
+AuthorTag.Font = Enum.Font.SourceSansItalic
+AuthorTag.TextSize = 14
+AuthorTag.TextXAlignment = Enum.TextXAlignment.Right
+
+local Layout = Instance.new("UIListLayout", Scroll)
+Layout.Padding = UDim.new(0, 8)
+Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local Padding = Instance.new("UIPadding", Scroll)
+Padding.PaddingTop = UDim.new(0, 5)
+
+-- ЛОГИКА
+
+local function GetPlayer(Name)
+    Name = Name:lower()
+    for _, x in next, Players:GetPlayers() do
+        if x ~= Player then
+            if x.Name:lower():match("^" .. Name) or x.DisplayName:lower():match("^" .. Name) then
+                return x
+            end
+        end
+    end
+    return nil
+end
+
+local function Message(_Title, _Text, Time)
+    game:GetService("StarterGui"):SetCore("SendNotification", {Title = _Title, Text = _Text, Duration = Time})
+end
+
+local function SkidFling(TargetPlayer)
+    local Character = Player.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    local RootPart = Humanoid and Humanoid.RootPart
+
+    local TCharacter = TargetPlayer.Character
+    local THumanoid = TCharacter and TCharacter:FindFirstChildOfClass("Humanoid")
+    local TRootPart = THumanoid and THumanoid.RootPart
+    local THead = TCharacter and TCharacter:FindFirstChild("Head")
+    local Accessory = TCharacter and TCharacter:FindFirstChildOfClass("Accessory")
+    local Handle = Accessory and Accessory:FindFirstChild("Handle")
+
+    if Character and Humanoid and RootPart then
+        getgenv().OldPos = RootPart.CFrame
+        
+        if THumanoid and THumanoid.Sit then
+            return Message("Error Occurred", "Target is sitting", 5)
+        end
+        if THead then
+            workspace.CurrentCamera.CameraSubject = THead
+        elseif Handle then
+            workspace.CurrentCamera.CameraSubject = Handle
+        else
+            workspace.CurrentCamera.CameraSubject = THumanoid
+        end
+        if not TCharacter:FindFirstChildWhichIsA("BasePart") then
+            return
+        end
+        
+        local function FPos(BasePart, Pos, Ang)
+            RootPart.CFrame = CFrame.new(BasePart.Position) * Pos * Ang
+            Character:SetPrimaryPartCFrame(CFrame.new(BasePart.Position) * Pos * Ang)
+            RootPart.Velocity = Vector3.new(9e7, 9e7 * 10, 9e7)
+            RootPart.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
+        end
+        
+        local function SFBasePart(BasePart)
+            local TimeToWait = 2
+            local Time = tick()
+            local Angle = 0
+
+            repeat
+                if RootPart and THumanoid then
+                    if BasePart.Velocity.Magnitude < 50 then
+                        Angle = Angle + 100
+                        FPos(BasePart, CFrame.new(0, 1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle),0 ,0))
+                        task.wait()
+                        FPos(BasePart, CFrame.new(0, -1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                        task.wait()
+                    else
+                        FPos(BasePart, CFrame.new(0, 1.5, THumanoid.WalkSpeed), CFrame.Angles(math.rad(90), 0, 0))
+                        task.wait()
+                        FPos(BasePart, CFrame.new(0, -1.5, -THumanoid.WalkSpeed), CFrame.Angles(0, 0, 0))
+                        task.wait()
+                    end
+                else
+                    break
+                end
+            until BasePart.Velocity.Magnitude > 500 or BasePart.Parent ~= TargetPlayer.Character or TargetPlayer.Parent ~= Players or not TargetPlayer.Character == TCharacter or THumanoid.Sit or Humanoid.Health <= 0 or tick() > Time + TimeToWait
+        end
+        
+        getgenv().FPDH = workspace.FallenPartsDestroyHeight
+        workspace.FallenPartsDestroyHeight = 0/0
+        
+        local BV = Instance.new("BodyVelocity")
+        BV.Name = "EpixVel"
+        BV.Parent = RootPart
+        BV.Velocity = Vector3.new(9e8, 9e8, 9e8)
+        BV.MaxForce = Vector3.new(1/0, 1/0, 1/0)
+        
+        Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+        
+        if TRootPart and THead then
+            if (TRootPart.CFrame.p - THead.CFrame.p).Magnitude > 5 then
+                SFBasePart(THead)
+            else
+                SFBasePart(TRootPart)
+            end
+        else
+            SFBasePart(TRootPart or THead)
+        end
+        
+        BV:Destroy()
+        Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+        workspace.CurrentCamera.CameraSubject = Humanoid
+        
+        repeat
+            RootPart.CFrame = getgenv().OldPos
+            Character:SetPrimaryPartCFrame(getgenv().OldPos)
+            Humanoid:ChangeState("GettingUp")
+            for _, x in pairs(Character:GetChildren()) do
+                if x:IsA("BasePart") then
+                    x.Velocity, x.RotVelocity = Vector3.new(), Vector3.new()
+                end
+            end
+            task.wait()
+        until (RootPart.Position - getgenv().OldPos.p).Magnitude < 25
+        
+        workspace.FallenPartsDestroyHeight = getgenv().FPDH
+    else
+        return Message("Error Occurred", "Random error", 5)
+    end
+end
+
+
+-- === ОБНОВЛЕННАЯ ЛОГИКА СПИСКА ===
+
+local function UpdateList()
+    for _, child in pairs(Scroll:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= Player then
+            local Btn = Instance.new("TextButton", Scroll)
+            Btn.Size = UDim2.new(0.95, 0, 0, 55) -- Чуть увеличили высоту для двух строк текста
+            Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            Btn.Text = "" 
+            Btn.AutoButtonColor = false
+            
+            Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
+            
+            -- АВАТАРКА
+            local Avatar = Instance.new("ImageLabel", Btn)
+            Avatar.Size = UDim2.new(0, 42, 0, 42)
+            Avatar.Position = UDim2.new(0, 7, 0.5, -21)
+            Avatar.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            Avatar.Image = Players:GetUserThumbnailAsync(p.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
+            Instance.new("UICorner", Avatar).CornerRadius = UDim.new(1, 0)
+
+            -- DISPLAY NAME (Жирный, основной)
+            local DisplayLabel = Instance.new("TextLabel", Btn)
+            DisplayLabel.Size = UDim2.new(1, -65, 0, 25)
+            DisplayLabel.Position = UDim2.new(0, 60, 0, 8)
+            DisplayLabel.BackgroundTransparency = 1
+            DisplayLabel.Text = p.DisplayName
+            DisplayLabel.TextColor3 = Color3.new(1, 1, 1)
+            DisplayLabel.Font = Enum.Font.SourceSansBold
+            DisplayLabel.TextSize = 18
+            DisplayLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+            -- USERNAME (Серый, поменьше, через @)
+            local UserLabel = Instance.new("TextLabel", Btn)
+            UserLabel.Size = UDim2.new(1, -65, 0, 20)
+            UserLabel.Position = UDim2.new(0, 60, 0, 28)
+            UserLabel.BackgroundTransparency = 1
+            UserLabel.Text = "@" .. p.Name
+            UserLabel.TextColor3 = Color3.fromRGB(160, 160, 160) -- Неяркий серый
+            UserLabel.Font = Enum.Font.SourceSans
+            UserLabel.TextSize = 14
+            UserLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+            -- ОБВОДКА ПРИ НАВЕДЕНИИ
+            local bStroke = Instance.new("UIStroke", Btn)
+            bStroke.Color = Color3.fromRGB(0, 160, 0)
+            bStroke.Thickness = 2
+            bStroke.Transparency = 1
+            bStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+            Btn.MouseEnter:Connect(function()
+                bStroke.Transparency = 0
+                Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            end)
+
+            Btn.MouseLeave:Connect(function()
+                bStroke.Transparency = 1
+                Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            end)
+
+            Btn.MouseButton1Click:Connect(function()
+                SkidFling(p)
+            end)
+        end
+    end
+    Scroll.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 10)
+end
+
+-- Авто-обновление при входе/выходе игроков
+Players.PlayerAdded:Connect(UpdateList)
+Players.PlayerRemoving:Connect(UpdateList)
+UpdateList() -- Запуск при старте
