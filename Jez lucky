@@ -1,1 +1,198 @@
-local a=game:GetService("HttpService")local b=game:GetService("ReplicatedStorage")local c=game:GetService("Workspace")local d=game:GetService("CoreGui")local function e()return a:GenerateGUID(false)end;local f=Color3.fromRGB(12,12,12)local g=Color3.fromRGB(46,204,113)local h=Color3.fromRGB(39,174,96)local i=Color3.fromRGB(200,50,50)local j=Color3.fromRGB(60,60,60)local k={"SpawnGalaxyBlock","SpawnDiamondBlock","SpawnVoidBlock","SpawnRainbowBlock"}local l=Instance.new("ScreenGui")l.Name=e()pcall(function()l.Parent=d end)local m=Instance.new("Frame",l)m.Name=e()m.Size=UDim2.new(0,300,0,310)m.AnchorPoint=Vector2.new(1,0)m.Position=UDim2.new(1,-20,0.5,-155)m.BackgroundColor3=f;m.Active=true;m.Draggable=true;Instance.new("UICorner",m).CornerRadius=UDim.new(0,10)local n=Instance.new("TextButton",m)n.Name=e()n.Size=UDim2.new(0,35,0,35)n.Position=UDim2.new(1,-40,0,5)n.BackgroundColor3=Color3.fromRGB(30,30,30)n.Text="×"n.TextColor3=Color3.fromRGB(255,100,100)n.TextSize=26;n.Font=Enum.Font.GothamBold;Instance.new("UICorner",n).CornerRadius=UDim.new(0,6)local o=Instance.new("TextLabel",m)o.Name=e()o.Size=UDim2.new(1,0,0,50)o.Text="JEZ LUCKY"o.TextColor3=g;o.BackgroundTransparency=1;o.Font=Enum.Font.GothamBold;o.TextSize=24;local p=Instance.new("TextBox",m)p.Name=e()p.Size=UDim2.new(0,260,0,45)p.Position=UDim2.new(0.5,-130,0,60)p.BackgroundColor3=Color3.fromRGB(25,25,25)p.Text="100"p.TextColor3=Color3.fromRGB(255,255,255)p.Font=Enum.Font.GothamBold;p.TextSize=22;Instance.new("UICorner",p).CornerRadius=UDim.new(0,8)local q=Instance.new("TextButton",m)q.Name=e()q.Size=UDim2.new(0,260,0,55)q.Position=UDim2.new(0.5,-130,0,120)q.BackgroundColor3=h;q.Text="ЗАПУСТИТЬ"q.TextColor3=Color3.fromRGB(255,255,255)q.Font=Enum.Font.GothamBold;q.TextSize=20;Instance.new("UICorner",q).CornerRadius=UDim.new(0,8)local r=Instance.new("TextButton",m)r.Name=e()r.Size=UDim2.new(0,260,0,45)r.Position=UDim2.new(0.5,-130,0,185)r.BackgroundColor3=j;r.Text="ОЧИСТИТЬ ВСЁ"r.TextColor3=Color3.fromRGB(200,200,200)r.Font=Enum.Font.GothamBold;r.TextSize=18;Instance.new("UICorner",r).CornerRadius=UDim.new(0,8)local s=Instance.new("TextButton",m)s.Name=e()s.Size=UDim2.new(0,260,0,45)s.Position=UDim2.new(0.5,-130,0,245)s.BackgroundColor3=i;s.Text="СТОП"s.TextColor3=Color3.fromRGB(255,255,255)s.Font=Enum.Font.GothamBold;s.TextSize=18;s.Visible=false;Instance.new("UICorner",s).CornerRadius=UDim.new(0,8)n.MouseButton1Click:Connect(function()l:Destroy()end)local t=false;local u=false;r.MouseButton1Click:Connect(function()local v=0;for w,x in pairs(c:GetDescendants())do if x:IsA("BasePart")and(x.Name:find("Block")or x.Name:find("Lucky"))then x:Destroy()v=v+1 end end;r.Text="УДАЛЕНО: "..v;task.wait(1.5)r.Text="ОЧИСТИТЬ ВСЁ"end)q.MouseButton1Click:Connect(function()if u then return end;local v=tonumber(p.Text)if not v or v<=0 then return end;u=true;t=false;s.Visible=true;task.spawn(function()for y=1,v do if t then break end;local z=y%#k+1;local A=b:FindFirstChild(k[z])if A then A:FireServer()q.Text=y.." / "..v end;if y%20==0 then task.wait(math.random(5,10)/100)end end;q.Text="ГОТОВО!"task.wait(2)q.Text="ЗАПУСТИТЬ"s.Visible=false;u=false end)end)s.MouseButton1Click:Connect(function()t=true end)pcall(function()script.Parent=nil end)
+-- JEZ LUCKY BLOCK SCRIPT (Clean Version)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+
+-- Генерация случайного имени для защиты от обнаружения
+local function GenerateID()
+    return HttpService:GenerateGUID(false)
+end
+
+-- Цветовая палитра
+local Color_Background = Color3.fromRGB(12, 12, 12)
+local Color_Accent = Color3.fromRGB(46, 204, 113)
+local Color_Button = Color3.fromRGB(39, 174, 96)
+local Color_Stop = Color3.fromRGB(200, 50, 50)
+local Color_Clear = Color3.fromRGB(60, 60, 60)
+
+-- РАСШИРЕННЫЙ СПИСОК БЛОКОВ (Обычные + Редкие)
+local BlockEvents = {
+    "SpawnLuckyBlock",    -- Обычный
+    "SpawnSuperBlock",    -- Супер
+    "SpawnDiamondBlock",  -- Алмазный
+    "SpawnGalaxyBlock",   -- Галактический
+    "SpawnRainbowBlock",  -- Радужный
+    "SpawnVoidBlock",     -- Пустотный
+   
+    
+}
+
+-- Создание GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = GenerateID()
+pcall(function() ScreenGui.Parent = CoreGui end)
+
+-- Функция для вывода "достижения"
+local function ShowAchievement(title, text)
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = title;
+        Text = text;
+        Icon = "rbxassetid://6023426926"; -- Иконка щита/галочки
+        Duration = 5; -- Сколько секунд будет висеть
+    })
+end
+
+-- Вызываем уведомление сразу при запуске скрипта
+ShowAchievement("Успешный запуск!", "Jez Lucky активирован. Приятной игры, Jezafes!")
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Name = GenerateID()
+MainFrame.Size = UDim2.new(0, 300, 0, 310)
+MainFrame.AnchorPoint = Vector2.new(1, 0)
+MainFrame.Position = UDim2.new(1, -20, 0.5, -155)
+MainFrame.BackgroundColor3 = Color_Background
+MainFrame.Active = true
+MainFrame.Draggable = true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+
+-- Кнопка закрытия (Крестик)
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.new(0, 35, 0, 35)
+CloseBtn.Position = UDim2.new(1, -40, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+CloseBtn.TextSize = 26
+CloseBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+-- Заголовок
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.Text = "JEZ LUCKY"
+Title.TextColor3 = Color_Accent
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 24
+
+-- Поле ввода количества
+local AmountInput = Instance.new("TextBox", MainFrame)
+AmountInput.Size = UDim2.new(0, 260, 0, 45)
+AmountInput.Position = UDim2.new(0.5, -130, 0, 60)
+AmountInput.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+AmountInput.Text = "100"
+AmountInput.TextColor3 = Color3.new(1, 1, 1)
+AmountInput.Font = Enum.Font.GothamBold
+AmountInput.TextSize = 22
+Instance.new("UICorner", AmountInput).CornerRadius = UDim.new(0, 8)
+
+-- Кнопка ЗАПУСТИТЬ
+local StartBtn = Instance.new("TextButton", MainFrame)
+StartBtn.Size = UDim2.new(0, 260, 0, 55)
+StartBtn.Position = UDim2.new(0.5, -130, 0, 120)
+StartBtn.BackgroundColor3 = Color_Button
+StartBtn.Text = "ЗАПУСТИТЬ"
+StartBtn.TextColor3 = Color3.new(1, 1, 1)
+StartBtn.Font = Enum.Font.GothamBold
+StartBtn.TextSize = 20
+Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(0, 8)
+
+-- Кнопка ОЧИСТИТЬ ВСЁ
+local ClearBtn = Instance.new("TextButton", MainFrame)
+ClearBtn.Size = UDim2.new(0, 260, 0, 45)
+ClearBtn.Position = UDim2.new(0.5, -130, 0, 185)
+ClearBtn.BackgroundColor3 = Color_Clear
+ClearBtn.Text = "ОЧИСТИТЬ ВСЁ"
+ClearBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+ClearBtn.Font = Enum.Font.GothamBold
+ClearBtn.TextSize = 18
+Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 8)
+
+-- Кнопка СТОП
+local StopBtn = Instance.new("TextButton", MainFrame)
+StopBtn.Size = UDim2.new(0, 260, 0, 45)
+StopBtn.Position = UDim2.new(0.5, -130, 0, 245)
+StopBtn.BackgroundColor3 = Color_Stop
+StopBtn.Text = "СТОП"
+StopBtn.TextColor3 = Color3.new(1, 1, 1)
+StopBtn.Font = Enum.Font.GothamBold
+StopBtn.TextSize = 18
+StopBtn.Visible = false
+Instance.new("UICorner", StopBtn).CornerRadius = UDim.new(0, 8)
+
+-- ЛОГИКА
+local isStopped = false
+local isRunning = false
+
+-- Закрытие
+CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+-- Очистка блоков в мире
+ClearBtn.MouseButton1Click:Connect(function()
+    local count = 0
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and (obj.Name:find("Block") or obj.Name:find("Lucky")) then
+            obj:Destroy()
+            count = count + 1
+        end
+    end
+    ClearBtn.Text = "УДАЛЕНО: " .. count
+    task.wait(1.5)
+    ClearBtn.Text = "ОЧИСТИТЬ ВСЁ"
+end)
+
+-- Спавн блоков
+StartBtn.MouseButton1Click:Connect(function()
+    if isRunning then return end
+    local total = tonumber(AmountInput.Text)
+    if not total or total <= 0 then return end
+    
+    isRunning = true
+    isStopped = false
+    StopBtn.Visible = true
+    
+    task.spawn(function()
+        for i = 1, total do
+            if isStopped then break end
+            
+            local eventName = BlockEvents[i % #BlockEvents + 1]
+            local remote = ReplicatedStorage:FindFirstChild(eventName)
+            
+            if remote then
+                remote:FireServer()
+                StartBtn.Text = i .. " / " .. total
+            end
+            
+            -- Задержка каждые 20 блоков, чтобы не кикнуло за спам
+            if i % 20 == 0 then
+                task.wait(math.random(5, 10) / 100)
+            end
+        end
+        
+        StartBtn.Text = "ГОТОВО!"
+        task.wait(2)
+        StartBtn.Text = "ЗАПУСТИТЬ"
+        StopBtn.Visible = false
+        isRunning = false
+    end)
+end)
+
+StopBtn.MouseButton1Click:Connect(function()
+    isStopped = true
+end)
