@@ -1,0 +1,331 @@
+
+
+
+
+
+-- [[ СЕРВИСЫ ]] --
+
+
+
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local ESP_Enabled = false
+local ESP_Color = Color3.fromRGB(255, 0, 0) 
+
+
+-- [[ НАСТРОЙКИ ]] --
+local FOV_Radius = 100 
+local Show_FOV = true
+local AimEnabled = false 
+local aimKeyHeld = false 
+local aimKey = Enum.KeyCode.X
+local Smoothing = 0.5 -- 0.1 (плавно) - 1.0 (мгновенно)
+
+-- [[ ФУНКЦИЯ ПЕРЕТАСКИВАНИЯ (ПК И ТЕЛЕФОН) ]] --
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        local newPos = UDim2.new(
+            startPos.X.Scale, 
+            startPos.X.Offset + delta.X, 
+            startPos.Y.Scale, 
+            startPos.Y.Offset + delta.Y
+        )
+        TweenService:Create(frame, TweenInfo.new(0.1), {Position = newPos}):Play()
+    end
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
+
+-- [[ СОЗДАНИЕ GUI ]] --
+local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+ScreenGui.Name = "JezAimbotX"
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 160, 0, 120)
+MainFrame.Position = UDim2.new(0.5, -80, 0.1, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BackgroundTransparency = 0.1 -- Легкая прозрачность для стиля
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+
+local Gradient = Instance.new("UIGradient", MainFrame)
+Gradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 30, 30)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 15))
+})
+Gradient.Rotation = 45
+
+makeDraggable(MainFrame)
+
+-- СОЗДАЕМ ОБЪЕКТ ЗАГОЛОВКА (Раньше этого не было, поэтому всё ломалось)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Name = "Title"
+Title.Font = Enum.Font.GothamMedium 
+Title.Text = "J-AIM"
+Title.TextColor3 = Color3.fromRGB(80, 200, 120)
+Title.TextSize = 20
+Title.BackgroundTransparency = 1
+Title.TextXAlignment = Enum.TextXAlignment.Center
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.Size = UDim2.new(1, 0, 0, 30)
+
+local TitleStroke = Instance.new("UIStroke", Title)
+TitleStroke.Thickness = 0.5
+TitleStroke.Color = Color3.new(0, 0, 0)
+
+-- Кнопка закрытия
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.new(0, 22, 0, 22)
+CloseBtn.Position = UDim2.new(1, -26, 0, 4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 18
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+-- Кнопка Аимбота
+local AimBtn = Instance.new("TextButton", MainFrame)
+AimBtn.Size = UDim2.new(1, -20, 0, 35)
+AimBtn.Position = UDim2.new(0, 10, 0, 35)
+AimBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+AimBtn.Font = Enum.Font.GothamMedium
+AimBtn.Text = "AIMBOT: OFF"
+AimBtn.TextColor3 = Color3.new(1, 1, 1)
+AimBtn.TextSize = 14
+Instance.new("UICorner", AimBtn).CornerRadius = UDim.new(0, 6)
+
+local AimStroke = Instance.new("UIStroke", AimBtn)
+AimStroke.Color = Color3.fromRGB(255, 60, 60)
+AimStroke.Thickness = 1
+AimStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- Обводка только рамки
+
+-- Кнопка ESP
+local EspBtn = Instance.new("TextButton", MainFrame)
+EspBtn.Size = UDim2.new(1, -20, 0, 30)
+EspBtn.Position = UDim2.new(0, 10, 0, 75)
+EspBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+AimBtn.Font = Enum.Font.GothamMedium
+EspBtn.Text = "ESP: OFF"
+EspBtn.TextColor3 = Color3.new(1, 1, 1)
+EspBtn.TextSize = 14
+Instance.new("UICorner", EspBtn).CornerRadius = UDim.new(0, 6)
+
+local EspStroke = Instance.new("UIStroke", EspBtn)
+EspStroke.Color = Color3.fromRGB(255, 60, 60)
+EspStroke.Thickness = 1
+EspStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+-- [[ КРУГ FOV ]] --
+local FOV_Circle = Drawing.new("Circle")
+FOV_Circle.Thickness = 1
+FOV_Circle.NumSides = 64
+FOV_Circle.Radius = FOV_Radius
+FOV_Circle.Filled = false
+FOV_Circle.Transparency = 1
+FOV_Circle.Color = Color3.fromRGB(255, 255, 255)
+FOV_Circle.Visible = false
+
+
+-- [[ ПРОВЕРКА ВИДИМОСТИ ]] --
+local function isVisible(targetPart)
+    local character = LocalPlayer.Character
+    if not character then return false end
+    
+    local raycastParams = RaycastParams.new()
+    -- Добавляем и твоего персонажа, и GUI в список исключений
+    raycastParams.FilterDescendantsInstances = {character, ScreenGui}
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+    local raycastResult = workspace:Raycast(Camera.CFrame.Position, (targetPart.Position - Camera.CFrame.Position), raycastParams)
+    
+    -- Если луч ни обо что не ударился или попал в часть тела цели — значит врага видно
+    if not raycastResult or raycastResult.Instance:IsDescendantOf(targetPart.Parent) then
+        return true
+    end
+    return false
+end
+
+-- [[ ПОИСК ЦЕЛИ ]] --
+local function getClosestPlayer()
+    local closest = nil
+    local shortestDistance = math.huge
+    local mousePos = UserInputService:GetMouseLocation()
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+            local head = p.Character.Head
+            local humanoid = p.Character:FindFirstChild("Humanoid")
+            
+            if humanoid and humanoid.Health > 0 then
+                local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                
+                if onScreen then
+                    if isVisible(head) then -- Теперь проверяем видимость именно головы
+                        local distance = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
+                        if distance <= FOV_Radius and distance < shortestDistance then
+                            closest = head -- Возвращаем голову как цель
+                            shortestDistance = distance
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function createESP(player)
+    local lines = {
+        T = Drawing.new("Line"), B = Drawing.new("Line"), 
+        L = Drawing.new("Line"), R = Drawing.new("Line")
+    }
+
+    local function update()
+        local connection
+        connection = RunService.RenderStepped:Connect(function()
+            -- Если игрок вышел или меню удалено — убираем линии
+            if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not ScreenGui.Parent then
+                for _, v in pairs(lines) do v.Visible = false end
+                if not player.Parent or not ScreenGui.Parent then connection:Disconnect() end
+                return
+            end
+
+            local root = player.Character.HumanoidRootPart
+            local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+
+            if onScreen and ESP_Enabled then
+                local sizeY = (Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3, 0)).Y - Camera:WorldToViewportPoint(root.Position + Vector3.new(0, -3.5, 0)).Y)
+                local sizeX = sizeY / 1.5
+                local x, y = pos.X, pos.Y
+
+               -- Внутри функции update() в createESP
+local function setLine(line, p1, p2)
+    line.Visible = true
+    line.From = p1
+    line.To = p2
+    line.Color = ESP_Color
+    line.Thickness = 1.5 -- Сделаем линии ESP чуть четче
+    line.Transparency = 0.8 -- Сделаем их слегка мягче для глаза
+end
+
+-- Центрирование рамки по телу
+setLine(lines.T, Vector2.new(x - sizeX/2, y - sizeY/2), Vector2.new(x + sizeX/2, y - sizeY/2)) -- Верх
+setLine(lines.B, Vector2.new(x - sizeX/2, y + sizeY/2), Vector2.new(x + sizeX/2, y + sizeY/2)) -- Низ
+setLine(lines.L, Vector2.new(x - sizeX/2, y - sizeY/2), Vector2.new(x - sizeX/2, y + sizeY/2)) -- Лево
+setLine(lines.R, Vector2.new(x + sizeX/2, y - sizeY/2), Vector2.new(x + sizeX/2, y + sizeY/2)) -- Право
+            else
+                for _, v in pairs(lines) do v.Visible = false end
+            end
+        end)
+    end
+    coroutine.wrap(update)()
+end
+
+-- [[ ЛОГИКА КНОПКИ ]] --
+
+AimBtn.MouseButton1Click:Connect(function()
+    AimEnabled = not AimEnabled
+    FOV_Circle.Visible = AimEnabled
+
+    if AimEnabled then
+        AimBtn.Text = "AIMBOT: ON"
+        AimStroke.Color = Color3.fromRGB(60, 255, 60)
+    else
+        AimBtn.Text = "AIMBOT: OFF"
+        AimStroke.Color = Color3.fromRGB(255, 60, 60)
+    end
+end)
+
+-- Логика для кнопки ESP
+EspBtn.MouseButton1Click:Connect(function()
+    ESP_Enabled = not ESP_Enabled
+    if ESP_Enabled then
+        EspBtn.Text = "ESP: ON"
+        EspStroke.Color = Color3.fromRGB(60, 255, 60)
+    else
+        EspBtn.Text = "ESP: OFF"
+        EspStroke.Color = Color3.fromRGB(255, 60, 60)
+    end
+end)
+
+-- [[ УПРАВЛЕНИЕ КЛАВИШЕЙ X ]] --
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == aimKey then
+        aimKeyHeld = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == aimKey then
+        aimKeyHeld = false
+    end
+end)
+
+-- [[ ОБНОВЛЕНИЕ КАЖДЫЙ КАДР ]] --
+RunService.RenderStepped:Connect(function()
+    -- Обновляем позицию круга
+    local mousePos = UserInputService:GetMouseLocation()
+    FOV_Circle.Position = Vector2.new(mousePos.X, mousePos.Y)
+
+    -- Работа аима
+    if AimEnabled and aimKeyHeld then
+        local target = getClosestPlayer()
+        if target then
+            local lookAt = CFrame.new(Camera.CFrame.Position, target.Position)
+            Camera.CFrame = Camera.CFrame:Lerp(lookAt, Smoothing)
+        end
+    end
+end)
+
+-- Логика полного удаления скрипта при нажатии на крестик
+CloseBtn.MouseButton1Click:Connect(function()
+    ESP_Enabled = false -- Выключаем ESP, чтобы линии скрылись
+    if FOV_Circle then FOV_Circle:Remove() end
+    ScreenGui:Destroy()
+    script:Destroy()
+end)
+
+for _, p in pairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then createESP(p) end
+end
+Players.PlayerAdded:Connect(createESP)
+
+pcall(function()
+    script.Parent = nil 
+end)
