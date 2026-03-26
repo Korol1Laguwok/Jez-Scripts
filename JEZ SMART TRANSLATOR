@@ -1,0 +1,334 @@
+-- === JEZ SMART TRANSLATOR  ===
+
+
+
+
+
+
+
+
+
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+-- 1. СЛОВАРЬ ДЛЯ УЛУЧШЕНИЯ СМЫСЛА (исправляет сленг перед переводом)
+local slangMap = {
+    ["im"] = "I am",
+    ["u"] = "you",
+    ["r"] = "are",
+    ["n"] = "and",
+    ["wanna"] = "want to",
+    ["gonna"] = "going to",
+    ["lmao"] = "funny",
+}
+
+local function fixSlang(text)
+    local words = text:lower():split(" ")
+    for i, word in ipairs(words) do
+        if slangMap[word] then
+            words[i] = slangMap[word]
+        end
+    end
+    return table.concat(words, " ")
+end
+
+-- 2. ИНТЕРФЕЙС
+local TransGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local MainFrame = Instance.new("Frame", TransGui)
+MainFrame.Size = UDim2.new(0, 320, 0, 250)
+MainFrame.Position = UDim2.new(0.7, 0, 0.6, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true 
+Instance.new("UICorner", MainFrame)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Title.Text = "JEZ | SMART TRANSLATOR "
+Title.TextColor3 = Color3.fromRGB(0, 255, 150)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 14
+Instance.new("UICorner", Title)
+
+-- КНОПКА КРЕСТИК
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -27, 0, 3)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.TextSize = 18
+Instance.new("UICorner", CloseBtn)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+end)
+
+local ChatLog = Instance.new("ScrollingFrame", MainFrame)
+ChatLog.Size = UDim2.new(0.94, 0, 0.8, 0)
+ChatLog.Position = UDim2.new(0.03, 0, 0.15, 0)
+ChatLog.BackgroundTransparency = 1
+ChatLog.CanvasSize = UDim2.new(0, 0, 0, 0)
+ChatLog.ScrollBarThickness = 3
+local LogList = Instance.new("UIListLayout", ChatLog)
+LogList.Padding = UDim.new(0, 4)
+
+-- === НОВЫЙ БЛОК: ВВОД И ВЫБОР ЯЗЫКА ===
+local InputFrame = Instance.new("Frame", MainFrame)
+InputFrame.Size = UDim2.new(0.94, 0, 0, 85)
+InputFrame.Position = UDim2.new(0.03, 0, 0.72, 0)
+InputFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Instance.new("UICorner", InputFrame)
+
+local MyTextBox = Instance.new("TextBox", InputFrame)
+MyTextBox.Size = UDim2.new(1, -10, 0, 45)
+MyTextBox.Position = UDim2.new(0, 5, 0, 5)
+MyTextBox.BackgroundTransparency = 1
+MyTextBox.PlaceholderText = "Введите текст для перевода..."
+MyTextBox.Text = ""
+MyTextBox.TextColor3 = Color3.new(1, 1, 1)
+MyTextBox.TextWrapped = true
+MyTextBox.Font = Enum.Font.SourceSans
+MyTextBox.TextSize = 16
+MyTextBox.TextXAlignment = Enum.TextXAlignment.Left
+MyTextBox.TextYAlignment = Enum.TextYAlignment.Top
+
+-- 1. ОСНОВНАЯ КНОПКА
+local LangBtn = Instance.new("TextButton", InputFrame)
+LangBtn.Size = UDim2.new(0, 90, 0, 32)
+LangBtn.Position = UDim2.new(0, 5, 1, -37)
+LangBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+LangBtn.Text = "TO: EN"
+LangBtn.Font = Enum.Font.SourceSansBold
+LangBtn.TextSize = 20
+LangBtn.TextColor3 = Color3.new(0, 0, 0)
+Instance.new("UICorner", LangBtn)
+
+-- 2. САМА "ЛЕСТНИЦА" (Список языков)
+
+local Dropdown = Instance.new("ScrollingFrame", MainFrame)
+Dropdown.Size = UDim2.new(0, 90, 0, 150) -- Высота списка (на 5 языков сразу)
+Dropdown.Position = UDim2.new(0, 5, 0, 160) -- Появится над полем ввода
+Dropdown.Visible = false -- Сначала скрыта
+Dropdown.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Dropdown.BorderSizePixel = 0
+Dropdown.CanvasSize = UDim2.new(0, 0, 0, 0) -- Авто-размер ниже
+Dropdown.ZIndex = 10 -- Чтобы была поверх всего
+Instance.new("UICorner", Dropdown)
+
+local DropLayout = Instance.new("UIListLayout", Dropdown)
+DropLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+
+-- 3. ТАБЛИЦА ЯЗЫКОВ
+
+local languages = {
+    {name = "ENGLISH", code = "en"},
+    {name = "RUSSIAN", code = "ru"},
+    {name = "UKRAINIAN", code = "uk"},
+    {name = "GERMAN", code = "de"},
+    {name = "FRENCH", code = "fr"}
+}
+
+local targetLang = "en" -- Язык по умолчанию
+
+-- === ИСПРАВЛЕННЫЙ ЦИКЛ ===
+for _, data in ipairs(languages) do
+    local b = Instance.new("TextButton")
+    b.Parent = Dropdown
+    b.Size = UDim2.new(1, 0, 0, 30)
+    b.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    b.BorderSizePixel = 0
+    b.Text = data.name
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.SourceSansBold
+    b.TextSize = 14
+    b.ZIndex = 11
+    
+    -- СОХРАНЯЕМ КОД ЯЗЫКА ВНУТРИ ПЕРЕМЕННОЙ КНОПКИ
+    local myCode = data.code 
+    local myName = data.name
+
+    b.MouseButton1Click:Connect(function()
+        targetLang = myCode -- Теперь всегда берется именно тот код, который был при создании кнопки
+        LangBtn.Text = "TO: " .. myCode:upper()
+        Dropdown.Visible = false
+        print("Система: выбран язык " .. myName .. " (" .. myCode .. ")")
+    end)
+    
+    -- Визуальный эффект
+    b.MouseEnter:Connect(function() b.BackgroundColor3 = Color3.fromRGB(70, 70, 70) end)
+    b.MouseLeave:Connect(function() b.BackgroundColor3 = Color3.fromRGB(50, 50, 50) end)
+end
+
+Dropdown.CanvasSize = UDim2.new(0, 0, 0, #languages * 30)
+
+-- 4. ЛОГИКА ОТКРЫТИЯ СПИСКА
+
+LangBtn.MouseButton1Click:Connect(function()
+    Dropdown.Visible = not Dropdown.Visible -- Переключает: показать/скрыть
+end)
+
+local SendBtn = Instance.new("TextButton", InputFrame)
+SendBtn.Size = UDim2.new(1, -105, 0, 32) -- Ширина подстроилась под новую кнопку выбора
+SendBtn.Position = UDim2.new(0, 100, 1, -37) -- Теперь она начинается со 100-го пикселя
+SendBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+SendBtn.Text = "КОПИРОВАТЬ ПЕРЕВОД"
+SendBtn.TextColor3 = Color3.new(1, 1, 1)
+SendBtn.TextSize = 11 -- Текст кнопки отправки можно оставить обычным
+Instance.new("UICorner", SendBtn)
+
+
+-- Функция перевода и КОПИРОВАНИЯ
+local function copyTranslatedMessage()
+    local text = MyTextBox.Text
+    if text == "" then return end
+
+    local cleanedText = text:gsub("(%a)%1%1+", "%1%1") 
+    
+    -- ВАЖНО: sl=ru (с русского) tl=..targetLang (на выбранный язык)
+    local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=ru&tl="..targetLang.."&dt=t&q=" .. HttpService:UrlEncode(cleanedText)
+    
+    local success, result = pcall(function()
+        return game:HttpGet(url)
+    end)
+    
+    if success then
+        local decoded = HttpService:JSONDecode(result)
+        if decoded and decoded[1] and decoded[1][1] and decoded[1][1][1] then
+            local translatedText = decoded[1][1][1]
+            
+            -- Мы убрали проверку (trans ~= text), теперь копируется ВСЁ
+            setclipboard(translatedText)
+            
+            -- Эффект успеха
+            local oldText = SendBtn.Text
+            SendBtn.Text = "СКОПИРОВАНО!"
+            SendBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+            
+            task.delay(1.5, function()
+                SendBtn.Text = oldText
+                SendBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            end)
+            
+            MyTextBox.Text = "" 
+        end
+    end
+end
+
+-- Привязываем новую функцию к кнопке
+SendBtn.MouseButton1Click:Connect(copyTranslatedMessage)
+MyTextBox.FocusLost:Connect(function(ep) if ep then copyTranslatedMessage() end end)
+
+
+-- 3. ЛОГИКА
+local function translate(text)
+    -- 1. Очистка от лишних букв (heeello -> heello)
+    local cleanedText = text:gsub("(%a)%1%1+", "%1%1") 
+    
+    -- 2. Ссылка для Google API
+    local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ru&dt=t&q=" .. HttpService:UrlEncode(cleanedText)
+    
+    local success, result = pcall(function() return game:HttpGet(url) end)
+    
+    if success and result:find('[%[%]]') then
+        -- Google возвращает JSON. Нам нужно достать первую строку из первой таблицы.
+        local decoded = HttpService:JSONDecode(result)
+        
+        -- У Google структура такая: decoded[1][1][1]
+        if decoded and decoded[1] and decoded[1][1] and decoded[1][1][1] then
+            local trans = decoded[1][1][1]
+            
+            -- Возвращаем перевод, только если он реально изменил слово
+            return (trans:lower() ~= text:lower()) and trans or nil
+        end
+    end
+    return nil
+end
+
+-- === НОВАЯ ФУНКЦИЯ С АВАТАРКАМИ ===
+
+local function createMessage(user, translated)
+    local msgFrame = Instance.new("Frame", ChatLog)
+    msgFrame.Size = UDim2.new(1, -5, 0, 40) -- Немного увеличили высоту для фото
+    msgFrame.BackgroundTransparency = 0.95
+    msgFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+    Instance.new("UICorner", msgFrame)
+
+    local hLayout = Instance.new("UIListLayout", msgFrame)
+    hLayout.FillDirection = Enum.FillDirection.Horizontal
+    hLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    hLayout.Padding = UDim.new(0, 8) -- Отступ между фото, ником и текстом
+    Instance.new("UIPadding", msgFrame).PaddingLeft = UDim.new(0, 5)
+
+    -- === БЛОК АВАТАРКИ ===
+    local avatarImg = Instance.new("ImageLabel", msgFrame)
+    avatarImg.Size = UDim2.new(0, 32, 0, 32) -- Размер иконки
+    avatarImg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    avatarImg.BorderSizePixel = 0
+    Instance.new("UICorner", avatarImg).CornerRadius = UDim.new(1, 0) -- Делаем круглой
+    
+    -- Пытаемся получить фото игрока
+    local s, e = pcall(function()
+        local sender = Players:FindFirstChild(user)
+        if sender then
+            -- HeadShot - лицо крупным планом, Size48x48 - оптимальный размер
+            local content, isReady = Players:GetUserThumbnailAsync(sender.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+            avatarImg.Image = content
+        else
+            -- Заглушка, если игрок уже вышел
+            avatarImg.Image = "rbxassetid://15132410427" 
+        end
+    end)
+    -- Если Roblox API заглючил, ставим пустую картинку, чтобы скрипт не упал
+    if not s then avatarImg.Image = "" end 
+
+
+    -- === НИКНЕЙМ ===
+    local nameLabel = Instance.new("TextLabel", msgFrame)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = user .. ":"
+    nameLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+    nameLabel.Font = Enum.Font.SourceSansBold
+    nameLabel.TextSize = 14
+    
+    -- Авто-ширина под длину ника
+    local nameSize = game:GetService("TextService"):GetTextSize(nameLabel.Text, 14, nameLabel.Font, Vector2.new(1000, 1000))
+    nameLabel.Size = UDim2.new(0, nameSize.X, 1, 0)
+
+
+    -- === ТЕКСТ ПЕРЕВОДА ===
+    local textLabel = Instance.new("TextLabel", msgFrame)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = translated
+    textLabel.TextColor3 = Color3.new(1, 1, 1)
+    textLabel.Font = Enum.Font.SourceSans
+    textLabel.TextSize = 14
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.TextWrapped = true
+    
+    -- Ширина текста с учетом аватарки и ника
+    textLabel.Size = UDim2.new(1, -(nameSize.X + 55), 1, 0) 
+
+    -- Авто-высота под длинные сообщения
+    local contentSize = game:GetService("TextService"):GetTextSize(textLabel.Text, 14, textLabel.Font, Vector2.new(200, 1000))
+    msgFrame.Size = UDim2.new(1, -5, 0, math.max(40, contentSize.Y + 15))
+    
+    ChatLog.CanvasSize = UDim2.new(0, 0, 0, LogList.AbsoluteContentSize.Y)
+    ChatLog.CanvasPosition = Vector2.new(0, ChatLog.CanvasSize.Y.Offset)
+end
+
+
+local function onChatted(player, message)
+    if player == localPlayer then return end
+    local translated = translate(message)
+    if translated then createMessage(player.Name, translated) end
+end
+
+Players.PlayerAdded:Connect(function(p) p.Chatted:Connect(function(m) onChatted(p, m) end) end)
+for _, p in pairs(Players:GetPlayers()) do p.Chatted:Connect(function(m) onChatted(p, m) end) end
