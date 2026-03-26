@@ -6,9 +6,6 @@
 
 
 
-
-
-
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -22,6 +19,10 @@ local slangMap = {
     ["wanna"] = "want to",
     ["gonna"] = "going to",
     ["lmao"] = "funny",
+	["wdym"] = "What do you mean", 
+	["rip"] = "rest in peace",
+	["stupis"] = "stupid",
+	["ez"] = "easy",
 }
 
 local function fixSlang(text)
@@ -70,7 +71,7 @@ CloseBtn.MouseButton1Click:Connect(function()
 end)
 
 local ChatLog = Instance.new("ScrollingFrame", MainFrame)
-ChatLog.Size = UDim2.new(0.94, 0, 0.8, 0)
+ChatLog.Size = UDim2.new(0.94, 0, 0.45, 0) 
 ChatLog.Position = UDim2.new(0.03, 0, 0.15, 0)
 ChatLog.BackgroundTransparency = 1
 ChatLog.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -79,9 +80,10 @@ local LogList = Instance.new("UIListLayout", ChatLog)
 LogList.Padding = UDim.new(0, 4)
 
 -- === НОВЫЙ БЛОК: ВВОД И ВЫБОР ЯЗЫКА ===
+
 local InputFrame = Instance.new("Frame", MainFrame)
 InputFrame.Size = UDim2.new(0.94, 0, 0, 85)
-InputFrame.Position = UDim2.new(0.03, 0, 0.72, 0)
+InputFrame.Position = UDim2.new(0.03, 0, 0.63, 0) 
 InputFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 Instance.new("UICorner", InputFrame)
 
@@ -112,9 +114,9 @@ Instance.new("UICorner", LangBtn)
 -- 2. САМА "ЛЕСТНИЦА" (Список языков)
 
 local Dropdown = Instance.new("ScrollingFrame", MainFrame)
-Dropdown.Size = UDim2.new(0, 90, 0, 150) -- Высота списка (на 5 языков сразу)
-Dropdown.Position = UDim2.new(0, 5, 0, 160) -- Появится над полем ввода
-Dropdown.Visible = false -- Сначала скрыта
+Dropdown.Size = UDim2.new(0, 90, 0, 150)
+Dropdown.Position = UDim2.new(0.03, 5, 0.05, 0) 
+Dropdown.Visible = false
 Dropdown.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 Dropdown.BorderSizePixel = 0
 Dropdown.CanvasSize = UDim2.new(0, 0, 0, 0) -- Авто-размер ниже
