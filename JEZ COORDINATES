@@ -1,0 +1,208 @@
+-- === JEZ COORDINATES HUD (EXTREME BOTTOM RIGHT) ==
+
+
+
+
+
+
+-- === JEZ COORDINATES HUD + COPY BUTTON (EXTREME BOTTOM RIGHT) ===
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+
+-- 1. Интерфейс Координат
+local CoordsGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+CoordsGui.Name = "JezCoordsExtreme"
+
+local MainFrame = Instance.new("Frame", CoordsGui)
+-- Ширина 210, чтобы влезли и жирные цифры, и кнопка
+MainFrame.Size = UDim2.new(0, 210, 0, 40) 
+MainFrame.Position = UDim2.new(0.98, -210, 0.98, -40) 
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BackgroundTransparency = 0.3
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true 
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+
+-- Зеленая полоска
+local GlowLine = Instance.new("Frame", MainFrame)
+GlowLine.Size = UDim2.new(1, 0, 0, 2)
+GlowLine.Position = UDim2.new(0, 0, 1, -2)
+GlowLine.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+GlowLine.BorderSizePixel = 0
+Instance.new("UICorner", GlowLine)
+
+-- Текст координат (Крупный и жирный)
+local CoordsLabel = Instance.new("TextLabel", MainFrame)
+CoordsLabel.Size = UDim2.new(1, -40, 1, -2) -- Место под кнопку справа
+CoordsLabel.Position = UDim2.new(0, 5, 0, 0)
+CoordsLabel.BackgroundTransparency = 1
+CoordsLabel.Text = "Loading..."
+CoordsLabel.TextColor3 = Color3.new(1, 1, 1)
+CoordsLabel.Font = Enum.Font.SourceSansBold -- Жирный
+CoordsLabel.TextSize = 18 -- Крупный
+CoordsLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+-- Маленькая кнопка скопировать (квадратик справа)
+local CopyBtn = Instance.new("TextButton", MainFrame)
+CopyBtn.Size = UDim2.new(0, 30, 0, 30)
+CopyBtn.Position = UDim2.new(1, -35, 0.5, -15)
+CopyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+CopyBtn.Text = "C"
+CopyBtn.TextColor3 = Color3.new(1, 1, 1)
+CopyBtn.Font = Enum.Font.SourceSansBold
+CopyBtn.TextSize = 16
+Instance.new("UICorner", CopyBtn)
+
+-- 2. Логика обновления
+RunService.RenderStepped:Connect(function()
+    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local pos = localPlayer.Character.HumanoidRootPart.Position
+        CoordsLabel.Text = string.format("%.1f | %.1f | %.1f", pos.X, pos.Y, pos.Z)
+    else
+        CoordsLabel.Text = "Loading..."
+    end
+end)
+
+-- 3. Логика кнопки копирования
+CopyBtn.MouseButton1Click:Connect(function()
+    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local pos = localPlayer.Character.HumanoidRootPart.Position
+        local formatPos = string.format("%.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
+        setclipboard(formatPos)
+        
+        -- Эффект при нажатии
+        CopyBtn.Text = "ok"
+        CopyBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+        CopyBtn.TextColor3 = Color3.new(0, 0, 0)
+        
+        task.delay(0.7, function()
+            CopyBtn.Text = "C"
+            CopyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            CopyBtn.TextColor3 = Color3.new(1, 1, 1)
+        end)
+    end
+end)
+
+-- === УВЕЛИЧЕННОЕ ОКНО ТЕЛЕПОРТА (LARGE UI) ===
+
+local TPGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+TPGui.Name = "JezTeleportWindowLarge"
+
+local TPFrame = Instance.new("Frame", TPGui)
+-- Увеличили высоту до 120, чтобы всё крупное влезло
+TPFrame.Size = UDim2.new(0, 240, 0, 120) 
+TPFrame.Position = UDim2.new(0.98, -240, 0.5, -60) 
+TPFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+TPFrame.BackgroundTransparency = 0.2
+TPFrame.Active = true
+TPFrame.Draggable = true 
+Instance.new("UICorner", TPFrame).CornerRadius = UDim.new(0, 10)
+
+-- 1. Поле ввода координат (Сделали выше и шрифт 18)
+local TPInput = Instance.new("TextBox", TPFrame)
+TPInput.Size = UDim2.new(0.7, -10, 0, 40) -- Высота 40
+TPInput.Position = UDim2.new(0, 10, 0, 15)
+TPInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+TPInput.PlaceholderText = "Координаты..."
+TPInput.Text = ""
+TPInput.TextColor3 = Color3.new(1, 1, 1)
+TPInput.Font = Enum.Font.SourceSansBold
+TPInput.TextSize = 18 -- КРУПНО
+Instance.new("UICorner", TPInput)
+
+-- 2. Кнопка ТП (Сделали выше и шрифт 18)
+local TPBtn = Instance.new("TextButton", TPFrame)
+TPBtn.Size = UDim2.new(0.3, -15, 0, 40) -- Высота 40
+TPBtn.Position = UDim2.new(0.7, 5, 0, 15)
+TPBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+TPBtn.Text = "TP"
+TPBtn.TextColor3 = Color3.new(0, 0, 0)
+TPBtn.Font = Enum.Font.SourceSansBold
+TPBtn.TextSize = 18 -- КРУПНО
+Instance.new("UICorner", TPBtn)
+
+-- 3. Поле ввода ВРЕМЕНИ (Сделали жирнее)
+local TimeInput = Instance.new("TextBox", TPFrame)
+TimeInput.Size = UDim2.new(0.3, -10, 0, 40) -- Высота 40
+TimeInput.Position = UDim2.new(0, 10, 0, 65)
+TimeInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+TimeInput.PlaceholderText = "Сек"
+TimeInput.Text = "1"
+TimeInput.TextColor3 = Color3.new(1, 1, 1)
+TimeInput.Font = Enum.Font.SourceSansBold
+TimeInput.TextSize = 18 -- КРУПНО
+Instance.new("UICorner", TimeInput)
+
+-- 4. Кнопка AUTO-TP (Уже большая)
+local AutoBtn = Instance.new("TextButton", TPFrame)
+AutoBtn.Size = UDim2.new(0.7, -15, 0, 40) -- Высота 40
+AutoBtn.Position = UDim2.new(0.3, 5, 0, 65)
+AutoBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+AutoBtn.Text = "AUTO: OFF"
+AutoBtn.TextColor3 = Color3.new(1, 1, 1)
+AutoBtn.Font = Enum.Font.SourceSansBold
+AutoBtn.TextSize = 18 -- КРУПНО
+Instance.new("UICorner", AutoBtn)
+
+-- Зеленая полоска потолще
+local Line = Instance.new("Frame", TPFrame)
+Line.Size = UDim2.new(1, 0, 0, 4) -- Толщина 4
+Line.Position = UDim2.new(0, 0, 1, -4)
+Line.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+Instance.new("UICorner", Line)
+
+-- ПЕРЕМЕННЫЕ ДЛЯ ЛОГИКИ
+local isAuto = false
+
+-- Функция телепорта
+local function doTeleport()
+    local text = TPInput.Text
+    local coords = {}
+    for num in string.gmatch(text:gsub(",", " "), "[%d%.%-]+") do
+        table.insert(coords, tonumber(num))
+    end
+    if #coords >= 3 then
+        local targetPos = Vector3.new(coords[1], coords[2], coords[3])
+        local char = game.Players.LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+            return true
+        end
+    end
+    return false
+end
+
+-- Логика одиночного ТП
+TPBtn.MouseButton1Click:Connect(function()
+    if doTeleport() then
+        TPBtn.Text = "OK!"
+        task.delay(1, function() TPBtn.Text = "TP" end)
+    else
+        TPBtn.Text = "?"
+        task.delay(1, function() TPBtn.Text = "TP" end)
+    end
+end)
+
+-- Логика AUTO-TP
+AutoBtn.MouseButton1Click:Connect(function()
+    isAuto = not isAuto
+    if isAuto then
+        AutoBtn.Text = "AUTO: ON"
+        AutoBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80) -- Красный при работе
+        
+        -- Запускаем цикл в отдельном потоке
+        task.spawn(function()
+            while isAuto do
+                local waitTime = tonumber(TimeInput.Text) or 1
+                doTeleport()
+                task.wait(waitTime)
+            end
+        end)
+    else
+        AutoBtn.Text = "AUTO: OFF"
+        AutoBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+    end
+end)
