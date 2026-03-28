@@ -1,0 +1,194 @@
+-- === JEZ INVENTORY VIEW (2D FIXED) ===
+
+
+
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+local InvGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+InvGui.Name = "JezInventoryViewer"
+
+local MainFrame = Instance.new("Frame", InvGui)
+MainFrame.Size = UDim2.new(0, 400, 0, 300)
+MainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BackgroundTransparency = 0.1
+MainFrame.Active = true
+MainFrame.Draggable = true 
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+
+local Line = Instance.new("Frame", MainFrame)
+Line.Size = UDim2.new(1, 0, 0, 4)
+Line.Position = UDim2.new(0, 0, 1, -4)
+Line.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
+Instance.new("UICorner", Line)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.Text = "JEZ INVENTORY"
+Title.TextColor3 = Color3.fromRGB(0, 255, 150)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 20
+Title.BackgroundTransparency = 1
+
+local PlayerList = Instance.new("ScrollingFrame", MainFrame)
+PlayerList.Size = UDim2.new(0, 130, 1, -85)
+PlayerList.Position = UDim2.new(0, 10, 0, 40)
+PlayerList.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+PlayerList.CanvasSize = UDim2.new(0, 0, 5, 0)
+PlayerList.ScrollBarThickness = 4
+Instance.new("UIListLayout", PlayerList).Padding = UDim.new(0, 2)
+
+local ItemDisplay = Instance.new("ScrollingFrame", MainFrame)
+ItemDisplay.Size = UDim2.new(1, -160, 1, -120) 
+ItemDisplay.Position = UDim2.new(0, 150, 0, 40)
+ItemDisplay.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+ItemDisplay.CanvasSize = UDim2.new(0, 0, 10, 0)
+ItemDisplay.ScrollBarThickness = 4
+ItemDisplay.ZIndex = 1 -- Слой ниже кнопки
+ItemDisplay.ClipsDescendants = true
+Instance.new("UIListLayout", ItemDisplay).Padding = UDim.new(0, 6)
+
+
+
+-- === ФУНКЦИЯ ДЛЯ 2D-ИКОНОК (ИСПРАВЛЕНО) ===
+local function createStyledIcon(tool, parent)
+    local iconFrame = Instance.new("Frame", parent)
+    iconFrame.Size = UDim2.new(0, 50, 0, 50)
+    iconFrame.Position = UDim2.new(0, 5, 0.5, -25)
+    iconFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    iconFrame.BorderSizePixel = 0
+    Instance.new("UICorner", iconFrame).CornerRadius = UDim.new(0, 8)
+
+    local itemIcon = Instance.new("ImageLabel", iconFrame)
+    itemIcon.Size = UDim2.new(1, -8, 1, -8)
+    itemIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+    itemIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    itemIcon.BackgroundTransparency = 1
+    
+    -- Логика отображения: сначала ищем текстуру, если нет - генерируем иконку модели
+    if tool:IsA("Tool") then
+        if tool.TextureId ~= "" then
+            itemIcon.Image = tool.TextureId
+        else
+            -- Если TextureId пустой, используем rbxthumb (генерирует иконку из модели)
+            itemIcon.Image = "rbxthumb://type=Asset&id=" .. tool.ToolTip .. "&w=150&h=150"
+            
+            -- Если и rbxthumb не помог, ставим стандартную иконку Roblox
+            if itemIcon.Image == "" then
+                itemIcon.Image = "rbxassetid://125431355"
+            end
+        end
+    end
+
+    local countLabel = Instance.new("TextLabel", iconFrame)
+    countLabel.Size = UDim2.new(0, 20, 0, 20)
+    countLabel.Position = UDim2.new(0, 3, 0, 0)
+    countLabel.BackgroundTransparency = 1
+    countLabel.Text = ""
+    countLabel.TextColor3 = Color3.new(1, 1, 1)
+    countLabel.Font = Enum.Font.SourceSansBold
+    countLabel.TextSize = 13
+    countLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local stroke = Instance.new("UIStroke", countLabel)
+    stroke.Thickness = 1
+    stroke.Color = Color3.fromRGB(0, 0, 0)
+end
+
+local function showInventory(targetPlayer)
+    for _, child in pairs(ItemDisplay:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    local foundTools = {}
+    if targetPlayer:FindFirstChild("Backpack") then
+        for _, t in pairs(targetPlayer.Backpack:GetChildren()) do if t:IsA("Tool") then table.insert(foundTools, t) end end
+    end
+    if targetPlayer.Character then
+        for _, t in pairs(targetPlayer.Character:GetChildren()) do if t:IsA("Tool") then table.insert(foundTools, t) end end
+    end
+
+    for _, tool in pairs(foundTools) do
+        local itemFrame = Instance.new("Frame", ItemDisplay)
+        itemFrame.Size = UDim2.new(1, -10, 0, 60)
+        itemFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        Instance.new("UICorner", itemFrame)
+
+        createStyledIcon(tool, itemFrame)
+
+        local label = Instance.new("TextLabel", itemFrame)
+        label.Size = UDim2.new(1, -65, 1, 0)
+        label.Position = UDim2.new(0, 65, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = tool.Name
+        label.TextColor3 = Color3.new(1, 1, 1)
+        label.Font = Enum.Font.SourceSansBold
+        label.TextSize = 13
+        label.TextXAlignment = Enum.TextXAlignment.Left
+    end
+end
+
+-- Кнопка закрытия
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 50, 50)
+CloseBtn.TextSize = 25
+CloseBtn.Font = Enum.Font.SourceSansBold
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+CloseBtn.MouseButton1Click:Connect(function() InvGui:Destroy() end)
+
+local function updatePlayers()
+    for _, child in pairs(PlayerList:GetChildren()) do 
+        if child:IsA("TextButton") then child:Destroy() end 
+    end
+    
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= localPlayer then
+            local btn = Instance.new("TextButton", PlayerList)
+            btn.Size = UDim2.new(1, -5, 0, 40)
+            btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+            btn.Text = p.DisplayName
+            btn.TextColor3 = Color3.new(1, 1, 1)
+            btn.Font = Enum.Font.SourceSansBold
+            btn.TextSize = 14
+            Instance.new("UICorner", btn)
+            
+            btn.MouseButton1Click:Connect(function() 
+                showInventory(p) 
+                Title.Text = "VIEWING: " .. p.Name:upper()
+            end)
+        end
+    end
+end
+
+-- === ЛОГИКА АВТО-ОБНОВЛЕНИЯ ===
+
+
+game.Players.PlayerAdded:Connect(updatePlayers)
+game.Players.PlayerRemoving:Connect(updatePlayers)
+
+
+task.spawn(function()
+    while task.wait(2) do
+        
+        local currentText = Title.Text
+        if currentText:find("VIEWING: ") then
+            local targetName = currentText:gsub("VIEWING: ", ""):lower()
+            
+            
+            for _, p in pairs(game.Players:GetPlayers()) do
+                if p.Name:upper() == targetName:upper() then
+                    showInventory(p) 
+                    break
+                end
+            end
+        end
+    end
+end)
+
+updatePlayers()
