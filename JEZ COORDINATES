@@ -20,7 +20,6 @@ MainFrame.Active = true
 MainFrame.Draggable = true 
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 
--- Текст текущих координат
 local CoordsLabel = Instance.new("TextLabel", MainFrame)
 CoordsLabel.Size = UDim2.new(1, -40, 0, 40)
 CoordsLabel.Position = UDim2.new(0, 5, 0, 0)
@@ -31,7 +30,6 @@ CoordsLabel.Font = Enum.Font.GothamBold
 CoordsLabel.TextSize = 16
 CoordsLabel.TextXAlignment = Enum.TextXAlignment.Center
 
--- Кнопка "C" (Копировать свои координаты)
 local CopyBtn = Instance.new("TextButton", MainFrame)
 CopyBtn.Size = UDim2.new(0, 30, 0, 30)
 CopyBtn.Position = UDim2.new(1, -35, 0, 5)
@@ -42,7 +40,6 @@ CopyBtn.Font = Enum.Font.SourceSansBold
 CopyBtn.TextSize = 16
 Instance.new("UICorner", CopyBtn)
 
--- Кнопка выбора координат кликом
 local PickBtn = Instance.new("TextButton", MainFrame)
 PickBtn.Size = UDim2.new(0, 190, 0, 30)
 PickBtn.Position = UDim2.new(0, 10, 0, 45)
@@ -54,8 +51,6 @@ PickBtn.TextSize = 11
 Instance.new("UICorner", PickBtn)
 
 local isPicking = false
-
--- [[ ЛОГИКА HUD ]] --
 
 local function getPointedCoordinates()
     local mousePos = UserInputService:GetMouseLocation()
@@ -147,7 +142,6 @@ AutoBtn.Text = "AUTO: OFF"; AutoBtn.TextSize = 18; AutoBtn.Font = Enum.Font.Sour
 AutoBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100); AutoBtn.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", AutoBtn)
 
--- ЛОГИКА ТЕЛЕПОРТА
 local isAuto = false
 local function doTeleport()
     local coords = {}
@@ -165,13 +159,17 @@ local function doTeleport()
 end
 
 TPBtn.MouseButton1Click:Connect(function()
-    if doTeleport() then TPBtn.Text = "OK!" task.delay(1, function() TPBtn.Text = "TP" end) end
+    if doTeleport() then 
+        TPBtn.Text = "OK!"
+        task.delay(1, function() TPBtn.Text = "TP" end) 
+    end
 end)
 
 AutoBtn.MouseButton1Click:Connect(function()
     isAuto = not isAuto
     AutoBtn.Text = isAuto and "AUTO: ON" or "AUTO: OFF"
     AutoBtn.BackgroundColor3 = isAuto and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(100, 100, 100)
+    
     if isAuto then
         task.spawn(function()
             while isAuto do
@@ -179,9 +177,5 @@ AutoBtn.MouseButton1Click:Connect(function()
                 task.wait(tonumber(TimeInput.Text) or 1)
             end
         end)
-    end
-end)
-        AutoBtn.Text = "AUTO: OFF"
-        AutoBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
     end
 end)
