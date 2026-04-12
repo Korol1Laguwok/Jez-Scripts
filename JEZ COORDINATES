@@ -1,4 +1,4 @@
--- === JEZ COORDINATES HUD (EXTREME BOTTOM RIGHT) ==
+
 
 
 local Players = game:GetService("Players")
@@ -7,37 +7,168 @@ local UserInputService = game:GetService("UserInputService")
 local localPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- === 1. ИНТЕРФЕЙС КООРДИНАТ (HUD) ===
-local CoordsGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-CoordsGui.Name = "JezCoordsExtreme"
+-- Функция защиты и привязки к CoreGui
+local function protect(gui)
+    if syn and syn.protect_gui then syn.protect_gui(gui) end
+    gui.Parent = game:GetService("CoreGui")
+end
 
+-- === УЛЬТРА-БЫСТРАЯ ФУНКЦИЯ ПУТИ ===
+local PathfindingService = game:GetService("PathfindingService")
+
+local function createVisualWaypoint(position, name)
+    local folder = workspace:FindFirstChild("JezWaypoints") or Instance.new("Folder", workspace)
+    folder.Name = "JezWaypoints"
+    
+    local part = Instance.new("Part")
+    part.Name = name .. "_Target"
+    part.Position = position + Vector3.new(0, 0.5, 0)
+    part.Size = Vector3.new(2, 2, 2)
+    part.Shape = Enum.PartType.Ball
+    part.Material = Enum.Material.Neon
+    part.Color = Color3.fromRGB(0, 255, 100)
+    part.Anchored = true
+    part.CanCollide = false
+    part.Parent = folder
+    
+    local billboard = Instance.new("BillboardGui", part)
+    billboard.Size = UDim2.new(0, 100, 0, 30)
+    billboard.AlwaysOnTop = true
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    local label = Instance.new("TextLabel", billboard)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 14
+
+    local routeFolder = Instance.new("Folder", part)
+    routeFolder.Name = "Route"
+
+    -- Настройки быстрого пути
+    local path = PathfindingService:CreatePath({
+        AgentRadius = 2,
+        AgentHeight = 5,
+        AgentCanJump = true,
+        WaypointSpacing = 8, -- Еще больше расстояние (минимум объектов)
+    })
+
+    local lastPos = Vector3.new(0,0,0)
+
+    local function updatePath()
+        if not part or not part.Parent then return end
+        
+        local character = localPlayer.Character
+        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        -- Пересчитываем только если отошли на 10 метров (огромная экономия мощи)
+        if (hrp.Position - lastPos).Magnitude < 10 then return end
+        lastPos = hrp.Position
+
+        local success, _ = pcall(function()
+            path:ComputeAsync(hrp.Position, position)
+        end)
+
+        if success and path.Status == Enum.PathStatus.Success then
+            routeFolder:ClearAllChildren()
+            local waypoints = path:GetWaypoints()
+            
+            -- Отрисовка только ближайших 15 точек (чтобы не грузить карту)
+            local maxWaypoints = math.min(#waypoints, 15) 
+            
+            for i = 1, maxWaypoints - 1 do
+                local p1 = waypoints[i].Position
+                local p2 = waypoints[i+1].Position
+                
+                -- Используем очень тонкие детали-линии
+                local line = Instance.new("Part")
+                line.Size = Vector3.new(0.2, 0.2, (p1 - p2).Magnitude)
+                line.CFrame = CFrame.new(p1:Lerp(p2, 0.5), p2)
+                line.Anchored = true
+                line.CanCollide = false
+                line.Material = Enum.Material.Neon
+                line.Color = Color3.fromRGB(0, 255, 150)
+                line.Transparency = 0.7
+                line.Parent = routeFolder
+            end
+        end
+    end
+
+    -- Сверхбыстрый цикл проверки
+    task.spawn(function()
+        while part and part.Parent do
+            updatePath()
+            task.wait(0.5) -- Проверяем часто, но за счет лимита в 10 метров лагать не будет
+        end
+    end)
+    
+    return part
+end
+
+-- Создаем контейнеры
+local CoordsGui = Instance.new("ScreenGui")
+CoordsGui.Name = "JezMain"
+protect(CoordsGui)
+
+local TPGui = Instance.new("ScreenGui")
+TPGui.Name = "JezTP"
+protect(TPGui)
+
+-- === 1. ГЛАВНАЯ ПАНЕЛЬ КООРДИНАТ (HUD) ===
 local MainFrame = Instance.new("Frame", CoordsGui)
 MainFrame.Size = UDim2.new(0, 210, 0, 85) 
 MainFrame.Position = UDim2.new(0.98, -210, 0.98, -85) 
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-MainFrame.BackgroundTransparency = 0.3
+MainFrame.BackgroundTransparency = 0.2
 MainFrame.Active = true
 MainFrame.Draggable = true 
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+
+-- ГЛАВНЫЙ КРЕСТИК (ЗАКРЫВАЕТ ВСЁ)
+local MasterClose = Instance.new("TextButton", MainFrame)
+MasterClose.Size = UDim2.new(0, 35, 0, 35) -- Увеличил размер
+MasterClose.Position = UDim2.new(1, -40, 0, 5)
+MasterClose.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+MasterClose.Text = "×"
+MasterClose.TextColor3 = Color3.new(1, 1, 1)
+MasterClose.TextSize = 30 -- Текст теперь крупнее
+MasterClose.Font = Enum.Font.GothamBold
+Instance.new("UICorner", MasterClose).CornerRadius = UDim.new(0, 8)
+
+-- Логика полного закрытия
+
+MasterClose.MouseButton1Click:Connect(function()
+    -- 1. Удаляем визуальные метки из воркспейса
+    local folder = workspace:FindFirstChild("JezWaypoints")
+    if folder then
+        folder:Destroy()
+    end
+    
+    -- 2. Удаляем интерфейс
+    CoordsGui:Destroy()
+    TPGui:Destroy()
+end)
 
 local CoordsLabel = Instance.new("TextLabel", MainFrame)
-CoordsLabel.Size = UDim2.new(1, -40, 0, 40)
+CoordsLabel.Size = UDim2.new(1, -75, 0, 40)
 CoordsLabel.Position = UDim2.new(0, 5, 0, 0)
 CoordsLabel.BackgroundTransparency = 1
 CoordsLabel.Text = "Loading..."
 CoordsLabel.TextColor3 = Color3.new(1, 1, 1)
 CoordsLabel.Font = Enum.Font.GothamBold
-CoordsLabel.TextSize = 16
+CoordsLabel.TextSize = 14
 CoordsLabel.TextXAlignment = Enum.TextXAlignment.Center
 
 local CopyBtn = Instance.new("TextButton", MainFrame)
 CopyBtn.Size = UDim2.new(0, 30, 0, 30)
-CopyBtn.Position = UDim2.new(1, -35, 0, 5)
+CopyBtn.Position = UDim2.new(1, -75, 0, 5) -- Подвинул левее кнопки закрытия
 CopyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 CopyBtn.Text = "C"
 CopyBtn.TextColor3 = Color3.new(1, 1, 1)
 CopyBtn.Font = Enum.Font.SourceSansBold
-CopyBtn.TextSize = 16
+CopyBtn.TextSize = 18
 Instance.new("UICorner", CopyBtn)
 
 local PickBtn = Instance.new("TextButton", MainFrame)
@@ -50,19 +181,16 @@ PickBtn.Font = Enum.Font.GothamBold
 PickBtn.TextSize = 11
 Instance.new("UICorner", PickBtn)
 
+-- Логика HUD
 local isPicking = false
-
 local function getPointedCoordinates()
     local mousePos = UserInputService:GetMouseLocation()
     local unitRay = camera:ViewportPointToRay(mousePos.X, mousePos.Y)
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    raycastParams.FilterDescendantsInstances = {localPlayer.Character}
-    local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 5000, raycastParams)
+    local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 5000)
     if result then
         local pos = result.Position
         local formatted = string.format("%.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
-        setclipboard(formatted)
+        if setclipboard then setclipboard(formatted) end
         return formatted
     end
     return nil
@@ -95,24 +223,24 @@ CopyBtn.MouseButton1Click:Connect(function()
     if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local pos = localPlayer.Character.HumanoidRootPart.Position
         local formatPos = string.format("%.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
-        setclipboard(formatPos)
+        if setclipboard then setclipboard(formatPos) end
         CopyBtn.Text = "ok"; CopyBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 150)
         task.delay(0.7, function() CopyBtn.Text = "C"; CopyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40) end)
     end
 end)
 
 RunService.RenderStepped:Connect(function()
+    if not CoordsGui.Parent then return end
     if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local pos = localPlayer.Character.HumanoidRootPart.Position
         CoordsLabel.Text = string.format("%.1f | %.1f | %.1f", pos.X, pos.Y, pos.Z)
     end
 end)
 
--- === 2. ОКНО ТЕЛЕПОРТА (TP WINDOW) ===
-local TPGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+-- === 2. ОКНО ТЕЛЕПОРТА ===
 local TPFrame = Instance.new("Frame", TPGui)
-TPFrame.Size = UDim2.new(0, 240, 0, 120) 
-TPFrame.Position = UDim2.new(0.98, -240, 0.5, -60) 
+TPFrame.Size = UDim2.new(0, 240, 0, 300)
+TPFrame.Position = UDim2.new(0.98, -240, 0.5, -150)
 TPFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 TPFrame.BackgroundTransparency = 0.2
 TPFrame.Draggable = true; TPFrame.Active = true
@@ -120,7 +248,7 @@ Instance.new("UICorner", TPFrame)
 
 local TPInput = Instance.new("TextBox", TPFrame)
 TPInput.Size = UDim2.new(0.7, -10, 0, 40); TPInput.Position = UDim2.new(0, 10, 0, 15)
-TPInput.PlaceholderText = "Координаты..."; TPInput.Text = ""; TPInput.TextSize = 18
+TPInput.PlaceholderText = "Координаты..."; TPInput.Text = ""; TPInput.TextSize = 16
 TPInput.Font = Enum.Font.SourceSansBold; TPInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30); TPInput.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", TPInput)
 
@@ -142,27 +270,61 @@ AutoBtn.Text = "AUTO: OFF"; AutoBtn.TextSize = 18; AutoBtn.Font = Enum.Font.Sour
 AutoBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100); AutoBtn.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", AutoBtn)
 
+local SaveBtn = Instance.new("TextButton", TPFrame)
+SaveBtn.Size = UDim2.new(1, -20, 0, 30)
+SaveBtn.Position = UDim2.new(0, 10, 0, 110) -- Теперь она ниже кнопок Auto/Time
+SaveBtn.Text = "СОХРАНИТЬ ТЕКУЩУЮ ПОЗИЦИЮ"
+SaveBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 200)
+SaveBtn.TextColor3 = Color3.new(1, 1, 1)
+SaveBtn.Font = Enum.Font.GothamBold
+SaveBtn.TextSize = 12 
+Instance.new("UICorner", SaveBtn)
+
+SaveBtn.Size = UDim2.new(0.5, -12, 0, 30)
+SaveBtn.Position = UDim2.new(0, 10, 0, 110)
+SaveBtn.Text = "МОЯ ТОЧКА"
+
+-- Новая кнопка создания метки из TextBox
+local CreateAtCoordsBtn = Instance.new("TextButton", TPFrame)
+CreateAtCoordsBtn.Size = UDim2.new(0.5, -12, 0, 30)
+CreateAtCoordsBtn.Position = UDim2.new(0.5, 2, 0, 110)
+CreateAtCoordsBtn.Text = "МЕТКА ПО КООРД."
+CreateAtCoordsBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 0) -- Темно-зеленая
+CreateAtCoordsBtn.TextColor3 = Color3.new(1, 1, 1)
+CreateAtCoordsBtn.Font = Enum.Font.GothamBold
+CreateAtCoordsBtn.TextSize = 10
+Instance.new("UICorner", CreateAtCoordsBtn)
+
+-- Создаем список для меток
+local scrollFrame = Instance.new("ScrollingFrame", TPFrame)
+scrollFrame.Position = UDim2.new(0, 10, 0, 145) -- Начинается под SaveBtn
+scrollFrame.Size = UDim2.new(1, -20, 0, 145) 
+scrollFrame.BackgroundTransparency = 0.5
+scrollFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollFrame.ScrollBarThickness = 3
+Instance.new("UIListLayout", scrollFrame).Padding = UDim.new(0, 5)
+Instance.new("UICorner", scrollFrame)
+
 local isAuto = false
+-- ИСПРАВЛЕННЫЙ БЛОК ТЕЛЕПОРТА И АВТО-ТП
 local function doTeleport()
     local coords = {}
-    for num in string.gmatch(TPInput.Text:gsub(",", " "), "[%d%.%-]+") do
-        table.insert(coords, tonumber(num))
+    for num in string.gmatch(TPInput.Text:gsub(",", " "), "[%d%.%-]+") do 
+        table.insert(coords, tonumber(num)) 
     end
-    if #coords >= 3 then
-        local targetPos = Vector3.new(coords[1], coords[2], coords[3])
-        if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
-            return true
-        end
+    if #coords >= 3 and localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(Vector3.new(coords[1], coords[2], coords[3]) + Vector3.new(0, 3, 0))
+        return true
     end
     return false
 end
 
-TPBtn.MouseButton1Click:Connect(function()
+TPBtn.MouseButton1Click:Connect(function() 
     if doTeleport() then 
-        TPBtn.Text = "OK!"
+        TPBtn.Text = "OK!" 
         task.delay(1, function() TPBtn.Text = "TP" end) 
-    end
+    end 
 end)
 
 AutoBtn.MouseButton1Click:Connect(function()
@@ -172,10 +334,157 @@ AutoBtn.MouseButton1Click:Connect(function()
     
     if isAuto then
         task.spawn(function()
-            while isAuto do
+            while isAuto and TPGui.Parent do 
                 doTeleport()
-                task.wait(tonumber(TimeInput.Text) or 1)
+                task.wait(tonumber(TimeInput.Text) or 1) 
+            end
+        end) -- Закрываем функцию внутри task.spawn
+    end -- Закрываем if isAuto
+end) -- Закрываем MouseButton1Click
+
+-- Хранилище визуальных частей, чтобы удалять их при телепорте
+local currentVisualMarkers = {}
+
+SaveBtn.MouseButton1Click:Connect(function()
+    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local pos = localPlayer.Character.HumanoidRootPart.Position
+        local name = "Метка " .. (#scrollFrame:GetChildren() - 1)
+        
+        -- 1. Создаем шар и маршрут в мире
+        local visualMarker = createVisualWaypoint(pos, name)
+        
+        -- 2. Создаем контейнер для элементов управления
+        local MarkContainer = Instance.new("Frame", scrollFrame)
+        MarkContainer.Size = UDim2.new(1, -5, 0, 30)
+        MarkContainer.BackgroundTransparency = 1
+        MarkContainer.Name = name .. "_Container"
+        
+        -- 3. ПОЛЕ ВВОДА ДЛЯ ИМЕНИ (TextBox вместо обычной кнопки)
+        local NameInput = Instance.new("TextBox", MarkContainer)
+        NameInput.Size = UDim2.new(1, -75, 1, 0) -- Оставляем место под кнопки TP и X
+        NameInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        NameInput.Text = name
+        NameInput.TextColor3 = Color3.new(1, 1, 1)
+        NameInput.Font = Enum.Font.GothamBold
+        NameInput.TextSize = 10
+        NameInput.ClearTextOnFocus = false -- Чтобы текст не стирался сразу при клике
+        Instance.new("UICorner", NameInput)
+        
+        -- 4. Кнопка ТЕЛЕПОРТА (маленькая синяя кнопка)
+        local TpBtn = Instance.new("TextButton", MarkContainer)
+        TpBtn.Size = UDim2.new(0, 35, 1, 0)
+        TpBtn.Position = UDim2.new(1, -70, 0, 0)
+        TpBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+        TpBtn.Text = "TP"
+        TpBtn.TextColor3 = Color3.new(1, 1, 1)
+        TpBtn.Font = Enum.Font.GothamBold
+        Instance.new("UICorner", TpBtn)
+
+        -- 5. Кнопка УДАЛЕНИЯ (красный крестик)
+        local DelBtn = Instance.new("TextButton", MarkContainer)
+        DelBtn.Size = UDim2.new(0, 30, 1, 0)
+        DelBtn.Position = UDim2.new(1, -30, 0, 0)
+        DelBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+        DelBtn.Text = "X"
+        DelBtn.TextColor3 = Color3.new(1, 1, 1)
+        DelBtn.Font = Enum.Font.GothamBold
+        Instance.new("UICorner", DelBtn)
+
+        -- === ЛОГИКА ПЕРЕИМЕНОВАНИЯ ===
+        NameInput.FocusLost:Connect(function(enterPressed)
+            local newName = NameInput.Text
+            if newName ~= "" then
+                -- Обновляем имя в списке и над объектом в мире
+                MarkContainer.Name = newName .. "_Container"
+                if visualMarker and visualMarker:FindFirstChild("BillboardGui") then
+                    visualMarker.BillboardGui.TextLabel.Text = newName
+                end
             end
         end)
+
+        -- Логика телепорта
+        TpBtn.MouseButton1Click:Connect(function()
+            if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+            end
+        end)
+
+        -- Логика удаления
+        DelBtn.MouseButton1Click:Connect(function()
+            if visualMarker then visualMarker:Destroy() end
+            MarkContainer:Destroy()
+            task.wait(0.1)
+            scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #scrollFrame:GetChildren() * 35)
+        end)
+        
+        -- Обновляем скролл при добавлении
+        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #scrollFrame:GetChildren() * 35)
+        
+        -- Эффект на главной кнопке
+        SaveBtn.Text = "МЕТКА СОЗДАНА!"; SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+        task.delay(1.5, function() 
+            SaveBtn.Text = "МОЯ ТОЧКА"
+            SaveBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 200) 
+        end)
     end
-end)
+end) -- Закрывает SaveBtn.MouseButton1Click и условие if внутри него
+
+CreateAtCoordsBtn.MouseButton1Click:Connect(function()
+    local coords = {}
+    for num in string.gmatch(TPInput.Text:gsub(",", " "), "[%d%.%-]+") do
+        table.insert(coords, tonumber(num))
+    end
+
+    if #coords >= 3 then
+        local targetPos = Vector3.new(coords[1], coords[2], coords[3])
+        local name = "Метка (Коорд) " .. (#scrollFrame:GetChildren() - 1)
+        
+        local visualMarker = createVisualWaypoint(targetPos, name)
+        
+        local MarkContainer = Instance.new("Frame", scrollFrame)
+        MarkContainer.Size = UDim2.new(1, -5, 0, 30)
+        MarkContainer.BackgroundTransparency = 1
+        MarkContainer.Name = name .. "_Container"
+
+        local Mark = Instance.new("TextButton", MarkContainer)
+        Mark.Size = UDim2.new(1, -40, 1, 0)
+        Mark.BackgroundColor3 = Color3.fromRGB(40, 60, 40)
+        Mark.Text = name .. " | TP"
+        Mark.TextColor3 = Color3.new(1, 1, 1)
+        Mark.Font = Enum.Font.GothamBold
+        Mark.TextSize = 10
+        Mark.ZIndex = 2 
+        Instance.new("UICorner", Mark)
+
+        local DelBtn = Instance.new("TextButton", MarkContainer)
+        DelBtn.Size = UDim2.new(0, 30, 1, 0)
+        DelBtn.Position = UDim2.new(1, -30, 0, 0) 
+        DelBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+        DelBtn.Text = "X"
+        DelBtn.TextColor3 = Color3.new(1, 1, 1)
+        DelBtn.Font = Enum.Font.GothamBold
+        DelBtn.ZIndex = 3 
+        Instance.new("UICorner", DelBtn)
+
+        Mark.MouseButton1Click:Connect(function()
+            if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+            end
+        end)
+
+        DelBtn.MouseButton1Click:Connect(function()
+            if visualMarker then visualMarker:Destroy() end
+            MarkContainer:Destroy()
+            task.wait(0.1)
+            scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #scrollFrame:GetChildren() * 35)
+        end)
+
+        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #scrollFrame:GetChildren() * 35)
+        
+        CreateAtCoordsBtn.Text = "ГОТОВО!"; CreateAtCoordsBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+        task.delay(1, function() 
+            CreateAtCoordsBtn.Text = "МЕТКА ПО КООРД."
+            CreateAtCoordsBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 0) 
+        end)
+    end
+end) -- Теперь все блоки закрыты корректно
