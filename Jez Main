@@ -1,10 +1,41 @@
--- Jez Menu v19 --
+-- Jez Menu v19
 
 
 
+-- [[ СУПЕР-АГРЕССИВНАЯ ЗАЩИТА ОТ ДЮПА ]] --
+local UI_NAME = "JezMenu_Project"
 
+local function CleanUp()
+    -- Проверяем CoreGui (через pcall, чтобы не было ошибок доступа)
+    pcall(function()
+        for _, v in pairs(game:GetService("CoreGui"):GetChildren()) do
+            if v.Name == UI_NAME then
+                v:Destroy()
+            end
+        end
+    end)
+    
+    -- Проверяем PlayerGui (без WaitForChild, чтобы не тупило)
+    local lp = game:GetService("Players").LocalPlayer
+    if lp and lp:FindFirstChild("PlayerGui") then
+        for _, v in pairs(lp.PlayerGui:GetChildren()) do
+            if v.Name == UI_NAME then
+                v:Destroy()
+            end
+        end
+    end
 
+    -- Проверяем специальное хранилище читов (gethui)
+    if gethui then
+        for _, v in pairs(gethui():GetChildren()) do
+            if v.Name == UI_NAME then
+                v:Destroy()
+            end
+        end
+    end
+end
 
+CleanUp() -- Запускаем очистку перед созданием чего-либо
 
 local HttpService = game:GetService("HttpService")
 local localPlayer = game:GetService("Players").LocalPlayer
@@ -80,7 +111,8 @@ local flyEnabled = false
 local currentSpeed = nil 
 local flySpeed = 50 
 local lockSpeedEnabled = false 
-local savedSpeed = 16 
+local savedSpeed = 16
+local forceSpeed = false
 local waterPart = Instance.new("Part")
 waterPart.Name = "JezWaterPlatform"
 waterPart.Size = Vector3.new(25, 1, 25)
@@ -149,15 +181,16 @@ end
 
 -- [[ СОЗДАНИЕ GUI И КНОПКИ ]] --
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "JezMenu"
+ScreenGui.Name = "JezMenu_Project" -- СТАВИМ ТО ЖЕ ИМЯ, ЧТО И В ПРОВЕРКЕ ВВЕРХУ
+ScreenGui.ResetOnSpawn = false -- ДОБАВЛЯЕМ СЮДА, ЧТОБЫ НЕ ДЮПАЛОСЬ ПРИ СМЕРТИ
+
 -- [[ ЗАЩИТА И СКРЫТИЕ GUI ОТ АНТИЧИТА ]] --
 if syn and syn.protect_gui then
-    syn.protect_gui(ScreenGui) -- Скрывает GUI для некоторых эксплойтов
+    syn.protect_gui(ScreenGui) 
     ScreenGui.Parent = game:GetService("CoreGui")
 elseif gethui then
-    ScreenGui.Parent = gethui() -- Самый безопасный вариант для мобильных читов (Delta, Fluxus и др.)
+    ScreenGui.Parent = gethui() -- Самый безопасный вариант
 else
-    -- Пытаемся засунуть в CoreGui, если нет спец. функций
     local success, err = pcall(function()
         ScreenGui.Parent = game:GetService("CoreGui")
     end)
@@ -341,6 +374,14 @@ end
 end)
 
 local TimeLabel = Instance.new("TextLabel", ScreenGui)
+task.spawn(function()
+    while true do
+        if TimeLabel then
+            TimeLabel.Text = os.date("%X")
+        end
+        task.wait(1)
+    end
+end)
 TimeLabel.Name = HttpService:GenerateGUID(false)
 TimeLabel.Size = UDim2.new(0, 100, 0, 30)
 TimeLabel.Position = UDim2.new(0, 10, 0, 10) -- В самом углу
@@ -423,15 +464,17 @@ Instance.new("UICorner", LockBtn).CornerRadius = UDim.new(0, 6)
 
 LockBtn.MouseButton1Click:Connect(function()
     lockSpeedEnabled = not lockSpeedEnabled
+    forceSpeed = lockSpeedEnabled
+
     local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
     
     if lockSpeedEnabled and hum then
-        savedSpeed = hum.WalkSpeed -- Запоминаем текущую скорость
-        LockBtn.Text = "🔒" -- Закрытый замок
-        LockBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113) -- Зеленый
+        savedSpeed = hum.WalkSpeed
+        LockBtn.Text = "🔒"
+        LockBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
     else
-        LockBtn.Text = "🔓" -- Открытый замок
-        LockBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40) -- Серый
+        LockBtn.Text = "🔓"
+        LockBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     end
 end)
 
@@ -457,7 +500,15 @@ Instance.new("UICorner", SubS)
 -- Логика зажатия
 AddS.MouseButton1Down:Connect(function() isAdding = true while isAdding do 
     local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-    if hum then hum.WalkSpeed = hum.WalkSpeed + 1 currentSpeed = hum.WalkSpeed end task.wait(0.08) end end)
+    if hum then 
+    hum.WalkSpeed = hum.WalkSpeed + 1
+    currentSpeed = hum.WalkSpeed
+    
+    if forceSpeed then
+        savedSpeed = hum.WalkSpeed
+    end
+end
+ task.wait(0.08) end end)
 AddS.MouseButton1Up:Connect(function() isAdding = false end)
 AddS.MouseLeave:Connect(function() isAdding = false end)
 
@@ -585,10 +636,11 @@ SearchBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 styleText(SearchBox, 14)
 Instance.new("UICorner", SearchBox)
 
+
 -- === ОБНОВЛЕННЫЙ СКРОЛЛ ДЛЯ СКРИПТОВ ===
 local Scroll = Instance.new("ScrollingFrame", ScriptFrame)
 Scroll.Size = UDim2.new(0.9, 0, 0.75, 0)
-Scroll.Position = UDim2.new(0.05, 0, 0.15, 0) 
+Scroll.Position = UDim2.new(0.05, 0, 0.22, 0) 
 Scroll.BackgroundTransparency = 1
 Scroll.BorderSizePixel = 0
 Scroll.ScrollBarThickness = 4 
@@ -596,7 +648,7 @@ Scroll.ScrollBarImageColor3 = Color3.fromRGB(46, 204, 113)
 Scroll.CanvasSize = UDim2.new(0, 0, 0, 0) 
 
 local ScriptList = Instance.new("UIListLayout", Scroll)
-ScriptList.Padding = UDim.new(0, 5)
+ScriptList.Padding = UDim.new(0, 8)
 ScriptList.SortOrder = Enum.SortOrder.LayoutOrder
 
 -- АВТО-РАСШИРЕНИЕ
@@ -856,134 +908,6 @@ Instance.new("UICorner", SubFly)
 local NoclipBtn  = createBtn("Сквозь стены: ВЫКЛ", UDim2.new(0.05, 0, 0.56, 0), PlayerFrame)
 local AntiAfkBtn = createBtn("Anti-AFK: ВЫКЛ", UDim2.new(0.05, 0, 0.68, 0), PlayerFrame)
 
-
--- Создаем кнопку в окне PlayerFrame
-
-local AimbotBtn = createBtn("ЗАПУСТИТЬ AIMBOT", UDim2.new(0.05, 0, 0.80, 0), PlayerFrame)
-AimbotBtn.BackgroundColor3 = Color3.fromRGB(130, 40, 40)
-
-AimbotBtn.MouseButton1Click:Connect(function()
-    -- Визуальное подтверждение нажатия
-    AimbotBtn.Text = "ЗАГРУЗКА..."
-    
-    task.spawn(function()
-        -- НИЖЕ ТВОЙ СКРИПТ БЕЗ ИЗМЕНЕНИЙ:
-        
-        --// Cache
-        local loadstring, game, getgenv, setclipboard = loadstring, game, getgenv, setclipboard
-
-        --// Loaded check
-        if getgenv().Aimbot then 
-            AimbotBtn.Text = "УЖЕ ЗАПУЩЕН"
-            return 
-        end
-
-        --// Load Aimbot V2 (Raw)
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/Exunys/Aimbot-V2/main/Resources/Scripts/Raw%20Main.lua"))()
-
-        --// Variables
-        local Aimbot = getgenv().Aimbot
-        local Settings, FOVSettings, Functions = Aimbot.Settings, Aimbot.FOVSettings, Aimbot.Functions
-
-        -- Устанавливаем клавишу X
-        Settings.TriggerKey = "X"
-
-        local Library = loadstring(game:GetObjects("rbxassetid://7657867786")[1].Source)()
-
-        local Parts = {"Head", "HumanoidRootPart", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg", "LeftHand", "RightHand", "LeftLowerArm", "RightLowerArm", "LeftUpperArm", "RightUpperArm", "LeftFoot", "LeftLowerLeg", "UpperTorso", "LeftUpperLeg", "RightFoot", "RightLowerLeg", "LowerTorso", "RightUpperLeg"}
-
-        --// Frame
-        Library.UnloadCallback = Functions.Exit
-
-        local MainFrame = Library:CreateWindow({
-            Name = "Aimbot V2 | Red & Black",
-            Themeable = {
-                Image = "", -- Убрали картинку
-                Info = "Hotkey: X",
-                Credit = false
-            },
-            Background = "",
-            -- ТЕМА: ЧЕРНО-КРАСНАЯ
-            Theme = [[{"__Designer.Colors.section":"FF0000","__Designer.Colors.topGradient":"000000","__Designer.Settings.ShowHideKey":"Enum.KeyCode.RightShift","__Designer.Colors.otherElementText":"990000","__Designer.Colors.hoveredOptionBottom":"220000","__Designer.Background.ImageAssetID":"","__Designer.Colors.unhoveredOptionTop":"110000","__Designer.Colors.innerBorder":"1A1A1A","__Designer.Colors.unselectedOption":"330000","__Designer.Background.UseBackgroundImage":false,"__Designer.Files.WorkspaceFile":"Aimbot V2","__Designer.Colors.main":"FF0000","__Designer.Colors.outerBorder":"000000","__Designer.Background.ImageColor":"000000","__Designer.Colors.tabText":"FFFFFF","__Designer.Colors.elementBorder":"1A1A1A","__Designer.Colors.sectionBackground":"050505","__Designer.Colors.selectedOption":"FF0000","__Designer.Colors.background":"000000","__Designer.Colors.bottomGradient":"050000","__Designer.Background.ImageTransparency":100,"__Designer.Colors.hoveredOptionTop":"330000","__Designer.Colors.elementText":"FF0000","__Designer.Colors.unhoveredOptionBottom":"110000"}]]
-        })
-
-        --// Tabs
-        local SettingsTab = MainFrame:CreateTab({ Name = "Settings" })
-        local FOVSettingsTab = MainFrame:CreateTab({ Name = "FOV Settings" })
-        local FunctionsTab = MainFrame:CreateTab({ Name = "Functions" })
-
-        --// Sections
-        local Values = SettingsTab:CreateSection({ Name = "Aimbot Values" })
-        local Checks = SettingsTab:CreateSection({ Name = "Checks" })
-        local FOV_Values = FOVSettingsTab:CreateSection({ Name = "FOV Values" })
-        local FunctionsSection = FunctionsTab:CreateSection({ Name = "Functions" })
-
-        -- Settings
-        Values:AddToggle({
-            Name = "Enabled",
-            Value = Settings.Enabled,
-            Callback = function(New) Settings.Enabled = New end
-        })
-
-        Values:AddTextbox({ 
-            Name = "Hotkey",
-            Value = "X",
-            Callback = function(New) Settings.TriggerKey = New end
-        })
-
-        Values:AddSlider({
-            Name = "Sensitivity",
-            Value = Settings.Sensitivity,
-            Min = 0, Max = 1, Decimals = 2,
-            Callback = function(New) Settings.Sensitivity = New end
-        })
-
-        -- Checks
-        Checks:AddToggle({
-            Name = "Team Check",
-            Value = Settings.TeamCheck,
-            Callback = function(New) Settings.TeamCheck = New end
-        })
-
-        Checks:AddToggle({
-            Name = "Wall Check",
-            Value = Settings.WallCheck,
-            Callback = function(New) Settings.WallCheck = New end
-        })
-
-        -- FOV
-        FOV_Values:AddToggle({
-            Name = "Enabled",
-            Value = FOVSettings.Enabled,
-            Callback = function(New) FOVSettings.Enabled = New end
-        })
-
-        FOV_Values:AddSlider({
-            Name = "Amount",
-            Value = FOVSettings.Amount,
-            Min = 10, Max = 300,
-            Callback = function(New) FOVSettings.Amount = New end
-        })
-
-        -- Functions
-        FunctionsSection:AddButton({
-            Name = "Reset Settings",
-            Callback = function() Functions.ResetSettings() end
-        })
-
-        FunctionsSection:AddButton({
-            Name = "Exit",
-            Callback = function() Library:Unload() end
-        })
-
-        -- Принудительный показ первой вкладки
-        SettingsTab:Show()
-        
-        AimbotBtn.Text = "AIMBOT ЗАПУЩЕН"
-    end)
-end)
-
-
 -- [[ ЛОГИКА ВЕРСИИ ВНИЗУ ]] --
 local VersionLabel = Instance.new("TextLabel", PlayerFrame) -- Добавим и сюда для красоты
 VersionLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -1087,6 +1011,7 @@ addScript("J-AIM", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/
 addScript("JEZ SMART TRANSLATOR", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/JEZ%20SMART%20TRANSLATOR")
 addScript("JEZ COORDINATES", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/JEZ%20COORDINATES")
 addScript("JEZ INVENTORY VIEW", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/JEZ%20INVENTORY%20VIEW")
+addScript("Jez Camping", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20Camping")
 
 SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     local text = SearchBox.Text:lower()
@@ -1185,6 +1110,10 @@ RunService.RenderStepped:Connect(function()
     if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
         local hrp = char.HumanoidRootPart
         local hum = char.Humanoid
+		-- ЖЁСТКАЯ ФИКСАЦИЯ СКОРОСТИ
+if forceSpeed then
+    hum.WalkSpeed = savedSpeed
+end
 
 		if lockSpeedEnabled then
             hum.WalkSpeed = savedSpeed
@@ -1265,13 +1194,19 @@ local function applyESP(player)
         if not character then return end
         local hrp = character:WaitForChild("HumanoidRootPart", 5)
         if not hrp then return end
+		-- РАНДОМНЫЙ ЦВЕТ ДЛЯ ИГРОКА
+local randomColor = Color3.fromRGB(
+    math.random(0,255),
+    math.random(0,255),
+    math.random(0,255)
+)
 
         -- 1. СТАНДАРТНЫЙ HIGHLIGHT (Обводка)
         local hl = character:FindFirstChild("JezHL") or Instance.new("Highlight")
         hl.Name = "JezHL"
         hl.Parent = character
         hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        hl.FillColor = Color3.fromRGB(46, 204, 113)
+        hl.FillColor = randomColor
         hl.Enabled = espEnabled
 
         -- 2. МЕТКА НАД ГОЛОВОЙ (Если игрок скрыл меши тела)
@@ -1289,7 +1224,7 @@ local function applyESP(player)
         label.BackgroundTransparency = 1
         label.Size = UDim2.new(1, 0, 1, 0)
         label.Text = "● " .. player.Name .. " ●" -- Точка, которую видно всегда
-        label.TextColor3 = Color3.fromRGB(46, 204, 113)
+        label.TextColor3 = randomColor
         label.TextStrokeTransparency = 0
         label.Font = Enum.Font.GothamBold
         label.TextSize = 14
@@ -1394,6 +1329,9 @@ task.spawn(function()
         task.wait(1)
     end
 end)
+
+
+
 
 pcall(function()
     script.Parent = nil 
