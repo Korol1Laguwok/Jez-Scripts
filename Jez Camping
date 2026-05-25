@@ -1,0 +1,344 @@
+--[[
+Jez Camping GUI v0.3.4
+--]]
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local localPlayer = Players.LocalPlayer
+
+-- Убираем старую GUI если есть
+if game.CoreGui:FindFirstChild("ZippoCamperGUI") then
+    game.CoreGui.ZippoCamperGUI:Destroy()
+end
+
+-- ЦВЕТА В СТИЛЕ JEZ MENU
+local Color_On = Color3.fromRGB(46, 204, 113)   -- Зелёный
+local Color_Off = Color3.fromRGB(130, 60, 60)   -- Красный
+local Color_Btn = Color3.fromRGB(45, 45, 45)    -- Серый
+local Color_BG = Color3.fromRGB(12, 12, 12)     -- Тёмный фон
+
+local function styleText(obj, size)
+    obj.TextColor3 = Color3.new(1, 1, 1)
+    obj.Font = Enum.Font.GothamBold
+    obj.TextSize = size
+    obj.TextStrokeTransparency = 0.5
+    obj.TextStrokeColor3 = Color3.new(0, 0, 0)
+end
+
+-- ФУНКЦИЯ ПЕРЕТАСКИВАНИЯ
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    RunService.RenderStepped:Connect(function()
+        if dragging and dragInput then
+            local delta = dragInput.Position - dragStart
+            local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            TweenService:Create(frame, TweenInfo.new(0.1), {Position = newPos}):Play()
+        end
+    end)
+end
+
+-- СОЗДАНИЕ GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ZippoCamperGUI"
+ScreenGui.ResetOnSpawn = false
+
+-- ЗАЩИТА ОТ АНТИЧИТА
+if syn and syn.protect_gui then
+    syn.protect_gui(ScreenGui)
+    ScreenGui.Parent = game:GetService("CoreGui")
+elseif gethui then
+    ScreenGui.Parent = gethui()
+else
+    pcall(function()
+        ScreenGui.Parent = game:GetService("CoreGui")
+    end)
+    if not ScreenGui.Parent then
+        ScreenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+    end
+end
+
+-- ГЛАВНОЕ ОКНО
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Name = "MainFrame"
+MainFrame.BackgroundColor3 = Color_BG
+MainFrame.Position = UDim2.new(0, 20, 0.15, 0)
+MainFrame.Size = UDim2.new(0, 300, 0, 400)
+MainFrame.Visible = true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+
+-- ЗАГОЛОВОК
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Title.Text = "Jez Camping GUI"
+Title.TextColor3 = Color_On
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 18
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 12)
+
+-- КНОПКА ЗАКРЫТИЯ
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.new(0, 25, 0, 25)
+CloseBtn.Position = UDim2.new(1, -30, 0, 8)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+Instance.new("UICorner", CloseBtn)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+end)
+
+-- ФУНКЦИЯ СОЗДАНИЯ КНОПКИ
+local function createBtn(text, pos)
+    local btn = Instance.new("TextButton", MainFrame)
+    btn.Size = UDim2.new(0, 130, 0, 28)
+    btn.Position = pos
+    btn.BackgroundColor3 = Color_Off
+    btn.Text = text
+    styleText(btn, 11)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    return btn
+end
+
+-- ФУНКЦИЯ ПОИСКА ИГРОКА
+function GetPlayer(str)
+    for _, a in pairs(Players:GetPlayers()) do
+        if string.match(string.lower(a.Name), string.lower(str)) then
+            return a
+        end
+    end
+    return nil
+end
+
+-- ТЕЛЕПОРТ К ИГРОКУ
+local TPTextBox = Instance.new("TextBox", MainFrame)
+TPTextBox.Size = UDim2.new(0, 265, 0, 26)
+TPTextBox.Position = UDim2.new(0.05, 0, 0.12, 0)
+TPTextBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+TPTextBox.PlaceholderText = "Teleport to player..."
+TPTextBox.Text = ""
+TPTextBox.TextColor3 = Color3.new(1, 1, 1)
+TPTextBox.Font = Enum.Font.GothamBold
+TPTextBox.TextSize = 12
+Instance.new("UICorner", TPTextBox).CornerRadius = UDim.new(0, 6)
+
+local yPos = 0.20
+
+TPTextBox.FocusLost:Connect(function(enter)
+    if enter then
+        local plr = GetPlayer(TPTextBox.Text)
+        if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            localPlayer.Character:MoveTo(plr.Character.HumanoidRootPart.Position + Vector3.new(0, 3, 0))
+            TPTextBox.Text = ""
+        end
+    end
+end)
+
+-- === СЕКЦИЯ 1 ===
+local Section1 = Instance.new("TextLabel", MainFrame)
+Section1.Size = UDim2.new(1, 0, 0, 18)
+Section1.Position = UDim2.new(0, 0, yPos, 0)
+Section1.BackgroundTransparency = 1
+Section1.Text = "--- ФУНКЦИИ ---"
+Section1.TextColor3 = Color3.fromRGB(160, 160, 160)
+Section1.Font = Enum.Font.GothamBold
+Section1.TextSize = 10
+yPos = yPos + 0.055
+
+local AntiExploitBtn = createBtn("Anti-Exploit", UDim2.new(0.05, 0, yPos, 0))
+AntiExploitBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        if game:GetService("ReplicatedStorage"):FindFirstChild("HackerKick") then
+            game:GetService("ReplicatedStorage").HackerKick:Destroy()
+        end
+    end)
+    pcall(function()
+        if localPlayer.PlayerScripts:FindFirstChild("AntiExploit") then
+            localPlayer.PlayerScripts.AntiExploit:Destroy()
+        end
+    end)
+    pcall(function()
+        if game:GetService("Workspace"):FindFirstChild("HackerKick") then
+            game:GetService("Workspace").HackerKick:Destroy()
+        end
+    end)
+    AntiExploitBtn.Text = "Done!"
+    task.wait(0.8)
+    AntiExploitBtn.Text = "Anti-Exploit"
+end)
+
+local NoDamageBtn = createBtn("No Damage", UDim2.new(0.54, 0, yPos, 0))
+local noDamage = false
+
+NoDamageBtn.MouseButton1Click:Connect(function()
+    noDamage = not noDamage
+    NoDamageBtn.Text = noDamage and "No Damage OK" or "No Damage"
+    NoDamageBtn.BackgroundColor3 = noDamage and Color_On or Color_Off
+    
+    if noDamage then
+        pcall(function()
+            local char = localPlayer.Character
+            for _, v in pairs({"RainDamage", "FloodDamage2", "FloodDamage", "DarkDamage", "Death", "PoisonScript"}) do
+                if char:FindFirstChild(v) then
+                    char[v]:Destroy()
+                end
+            end
+        end)
+        
+        localPlayer.Character.ChildAdded:Connect(function(obj)
+            if noDamage and string.find(obj.Name, "Damage") then
+                task.wait(0.1)
+                obj:Destroy()
+            end
+        end)
+    end
+end)
+
+yPos = yPos + 0.09
+
+-- === СЕКЦИЯ 2 ===
+local Section2 = Instance.new("TextLabel", MainFrame)
+Section2.Size = UDim2.new(1, 0, 0, 18)
+Section2.Position = UDim2.new(0, 0, yPos, 0)
+Section2.BackgroundTransparency = 1
+Section2.Text = "--- ТЕЛЕПОРТЫ ---"
+Section2.TextColor3 = Color3.fromRGB(46, 204, 113)
+Section2.Font = Enum.Font.GothamBold
+Section2.TextSize = 10
+yPos = yPos + 0.055
+
+local TentBtn = createBtn("Палатка", UDim2.new(0.05, 0, yPos, 0))
+local CaveBtn = createBtn("Пещера", UDim2.new(0.54, 0, yPos, 0))
+
+TentBtn.MouseButton1Click:Connect(function()
+    localPlayer.Character:MoveTo(Vector3.new(-10.76, 4.2, -53.78))
+end)
+CaveBtn.MouseButton1Click:Connect(function()
+    localPlayer.Character:MoveTo(Vector3.new(-247.09, 4.2, 156.64))
+end)
+
+yPos = yPos + 0.09
+
+local BasketBtn = createBtn("Корзина", UDim2.new(0.05, 0, yPos, 0))
+local ObbyBtn = createBtn("Obby End", UDim2.new(0.54, 0, yPos, 0))
+
+BasketBtn.MouseButton1Click:Connect(function()
+    localPlayer.Character:MoveTo(Vector3.new(-56.27, 5.94, -16.71))
+end)
+ObbyBtn.MouseButton1Click:Connect(function()
+    localPlayer.Character:MoveTo(Vector3.new(-604.07, -47.4, 166.82))
+end)
+
+yPos = yPos + 0.09
+
+local HighBtn = createBtn("High Point", UDim2.new(0.05, 0, yPos, 0))
+
+HighBtn.MouseButton1Click:Connect(function()
+    localPlayer.Character:MoveTo(Vector3.new(100.22, 20.74, -47.36))
+end)
+
+yPos = yPos + 0.09
+
+-- === СЕКЦИЯ 3 ===
+local Section3 = Instance.new("TextLabel", MainFrame)
+Section3.Size = UDim2.new(1, 0, 0, 18)
+Section3.Position = UDim2.new(0, 0, yPos, 0)
+Section3.BackgroundTransparency = 1
+Section3.Text = "--- ВИЗУАЛ ---"
+Section3.TextColor3 = Color3.fromRGB(160, 160, 160)
+Section3.Font = Enum.Font.GothamBold
+Section3.TextSize = 10
+yPos = yPos + 0.055
+
+local FogBtn = createBtn("No Fog", UDim2.new(0.05, 0, yPos, 0))
+local BearBtn = createBtn("No Bears", UDim2.new(0.54, 0, yPos, 0))
+
+FogBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        game:GetService("Lighting"):FindFirstChild("ColorCorrection"):Destroy()
+    end)
+    pcall(function()
+        game:GetService("Lighting").FogEnd = 100000
+    end)
+    FogBtn.Text = "Done!"
+    task.wait(0.8)
+    FogBtn.Text = "No Fog"
+end)
+
+BearBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        for _, v in pairs(workspace:GetChildren()) do
+            if string.find(string.lower(v.Name), "bear") then
+                v:Destroy()
+            end
+        end
+    end)
+    BearBtn.Text = "Done!"
+    task.wait(0.8)
+    BearBtn.Text = "No Bears"
+end)
+
+yPos = yPos + 0.09
+
+local NoRainBtn = createBtn("No Rain", UDim2.new(0.05, 0, yPos, 0))
+
+NoRainBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        localPlayer.PlayerScripts:FindFirstChild("RainBlur"):Destroy()
+    end)
+    NoRainBtn.Text = "Done!"
+    task.wait(0.8)
+    NoRainBtn.Text = "No Rain"
+end)
+
+-- === ПОДПИСЬ (СЕРАЯ И МАЛЕНЬКАЯ) ===
+local Footer = Instance.new("Frame", MainFrame)
+Footer.Size = UDim2.new(1, 0, 0, 28)
+Footer.Position = UDim2.new(0, 0, 1, -28)
+Footer.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+Footer.BorderSizePixel = 0
+Instance.new("UICorner", Footer).CornerRadius = UDim.new(0, 0, 0, 12)
+
+local CreatedBy = Instance.new("TextLabel", Footer)
+CreatedBy.Size = UDim2.new(1, 0, 0, 14)
+CreatedBy.Position = UDim2.new(0, 0, 0.2, 0)
+CreatedBy.BackgroundTransparency = 1
+CreatedBy.Text = "by Jezafes"
+CreatedBy.TextColor3 = Color3.fromRGB(100, 100, 100)
+CreatedBy.Font = Enum.Font.Gotham
+CreatedBy.TextSize = 11
+CreatedBy.TextTransparency = 0.2
+
+local VersionText = Instance.new("TextLabel", Footer)
+VersionText.Size = UDim2.new(1, 0, 0, 12)
+VersionText.Position = UDim2.new(0, 0, 0.6, 0)
+VersionText.BackgroundTransparency = 1
+VersionText.Text = "v0.3.4"
+VersionText.TextColor3 = Color3.fromRGB(80, 80, 80)
+VersionText.Font = Enum.Font.Gotham
+VersionText.TextSize = 9
+VersionText.TextTransparency = 0.3
+
+makeDraggable(MainFrame)
+
+print("Jez Camping GUI v0.3.4 loaded!")
