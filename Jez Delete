@@ -1,0 +1,215 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+local playerGui = player:WaitForChild("PlayerGui")
+
+local isEnabled = false
+local isClickProcessed = false -- Флаг защиты от зажатия
+
+-- Слабая таблица для предотвращения утечек памяти
+local deletedObjects = setmetatable({}, { __mode = "k" })
+
+-- ============================================================================
+-- СОЗДАНИЕ UI
+-- ============================================================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ObjectHiderMenu"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 220, 0, 260)
+mainFrame.Position = UDim2.new(0.8, 0, 0.3, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Parent = screenGui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 25)
+title.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+title.Text = "Удаление объектов (R + LMB)"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextSize = 11
+title.Font = Enum.Font.SourceSansBold
+title.Parent = mainFrame
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0.9, 0, 0, 30)
+toggleBtn.Position = UDim2.new(0.05, 0, 0.12, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+toggleBtn.Text = "Режим: ВЫКЛ"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextSize = 13
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.Parent = mainFrame
+
+local scrollList = Instance.new("ScrollingFrame")
+scrollList.Size = UDim2.new(0.9, 0, 0, 130)
+scrollList.Position = UDim2.new(0.05, 0, 0.26, 0)
+scrollList.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+scrollList.BorderSizePixel = 0
+scrollList.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollList.Parent = mainFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 4)
+listLayout.Parent = scrollList
+
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    scrollList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+end)
+
+local restoreAllBtn = Instance.new("TextButton")
+restoreAllBtn.Size = UDim2.new(0.9, 0, 0, 30)
+restoreAllBtn.Position = UDim2.new(0.05, 0, 0.85, 0)
+restoreAllBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 180)
+restoreAllBtn.Text = "Восстановить ВСЁ"
+restoreAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+restoreAllBtn.TextSize = 12
+restoreAllBtn.Font = Enum.Font.SourceSansBold
+restoreAllBtn.Parent = mainFrame
+
+-- ============================================================================
+-- DRAGGABLE ДЛЯ FRAME
+-- ============================================================================
+local dragging, dragInput, dragStart, startPos
+
+local function updateDrag(input)
+    local delta = input.Position - dragStart
+    mainFrame.Position = UDim2.new(
+        startPos.X.Scale, startPos.X.Offset + delta.X,
+        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    )
+end
+
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+mainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        updateDrag(input)
+    end
+end)
+
+-- ============================================================================
+-- ЛОГИКА СКРЫТИЯ И ВОССТАНОВЛЕНИЯ
+-- ============================================================================
+
+toggleBtn.MouseButton1Click:Connect(function()
+    isEnabled = not isEnabled
+    toggleBtn.Text = isEnabled and "Режим: ВКЛ" or "Режим: ВЫКЛ"
+    toggleBtn.BackgroundColor3 = isEnabled and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
+end)
+
+local function isSafeToHide(target)
+    if not target or target == Workspace or target == workspace.Terrain then return false end
+    if player.Character and target:IsDescendantOf(player.Character) then return false end
+    if target:IsA("Terrain") or target:IsA("Camera") then return false end
+    return true
+end
+
+local function hideObject(target)
+    if not isSafeToHide(target) then return end
+
+    -- Удаляем строго тот Part, по которому кликнули
+    local objToHide = target
+
+    if deletedObjects[objToHide] or not isSafeToHide(objToHide) then return end
+
+    local originalParent = objToHide.Parent
+    deletedObjects[objToHide] = originalParent
+    objToHide.Parent = nil
+
+    local itemBtn = Instance.new("TextButton")
+    itemBtn.Size = UDim2.new(1, -6, 0, 25)
+    itemBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    itemBtn.Text = " [Вернуть] " .. string.sub(objToHide.Name, 1, 20)
+    itemBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    itemBtn.TextSize = 11
+    itemBtn.Font = Enum.Font.SourceSans
+    itemBtn.Parent = scrollList
+
+    itemBtn.MouseButton1Click:Connect(function()
+        if objToHide and deletedObjects[objToHide] then
+            objToHide.Parent = deletedObjects[objToHide]
+            deletedObjects[objToHide] = nil
+        end
+        itemBtn:Destroy()
+    end)
+end
+
+restoreAllBtn.MouseButton1Click:Connect(function()
+    for obj, originalParent in pairs(deletedObjects) do
+        if obj and originalParent then
+            obj.Parent = originalParent
+        end
+    end
+    table.clear(deletedObjects)
+
+    for _, child in ipairs(scrollList:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+end)
+
+local function getTargetUnderMouse()
+    local mousePosition = UserInputService:GetMouseLocation()
+    local unitRay = camera:ViewportPointToRay(mousePosition.X, mousePosition.Y)
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+    if player.Character then
+        raycastParams.FilterDescendantsInstances = { player.Character }
+    end
+
+    local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, raycastParams)
+    return result and result.Instance or nil
+end
+
+-- ============================================================================
+-- ОБРАБОТКА ОДИНОЧНОГО НАЖАТИЯ
+-- ============================================================================
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if isEnabled and not isClickProcessed and UserInputService:IsKeyDown(Enum.KeyCode.R) then
+            isClickProcessed = true
+            
+            local target = getTargetUnderMouse()
+            if target then
+                hideObject(target)
+            end
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isClickProcessed = false
+    end
+end)
