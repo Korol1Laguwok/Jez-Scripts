@@ -1,4 +1,5 @@
--- Jez Menu v19
+-- Jez Menu v20
+
 
 
 
@@ -434,29 +435,56 @@ end)
 
 -- [[ ЭЛЕМЕНТЫ МЕНЮ С FPS ]] --
 
--- Спидометр
+-- Поле ввода скорости и кнопки управления
 local SpeedTitle = Instance.new("TextLabel", MainFrame)
 SpeedTitle.Size = UDim2.new(1, 0, 0, 20)
 SpeedTitle.Position = UDim2.new(0, 0, 0, 60)
 SpeedTitle.BackgroundTransparency = 1
-SpeedTitle.Text = "ТЕКУЩАЯ СКОРОСТЬ"
+SpeedTitle.Text = "СКОРОСТЬ БЕГА"
 styleText(SpeedTitle, 13)
 
-local SpeedLabel = Instance.new("TextLabel", MainFrame)
-SpeedLabel.Size = UDim2.new(0.9, 0, 0, 45)
-SpeedLabel.Position = UDim2.new(0.05, 0, 0, 80)
-SpeedLabel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-SpeedLabel.Text = "0"
-SpeedLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
-styleText(SpeedLabel, 26)
-Instance.new("UICorner", SpeedLabel)
+local SpeedInput = Instance.new("TextBox", MainFrame)
+SpeedInput.Size = UDim2.new(0.9, 0, 0, 45)
+SpeedInput.Position = UDim2.new(0.05, 0, 0, 80)
+SpeedInput.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+SpeedInput.Text = "16"
+SpeedInput.PlaceholderText = "Введите скорость..."
+SpeedInput.TextColor3 = Color3.fromRGB(46, 204, 113)
+SpeedInput.ClearTextOnFocus = false
+styleText(SpeedInput, 22)
+Instance.new("UICorner", SpeedInput)
 
--- Маленький замок справа от цифры
-local LockBtn = Instance.new("TextButton", SpeedLabel)
+-- Функция обновления скорости
+local function applySpeed(newSpeed)
+    local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
+    if hum then
+        hum.WalkSpeed = newSpeed
+        currentSpeed = newSpeed
+        if forceSpeed then
+            savedSpeed = newSpeed
+        end
+    end
+end
+
+-- Обработка ввода текста в поле
+SpeedInput.FocusLost:Connect(function(enterPressed)
+    local val = tonumber(SpeedInput.Text)
+    if val then
+        applySpeed(val)
+    else
+        local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+            SpeedInput.Text = tostring(hum.WalkSpeed)
+        end
+    end
+end)
+
+-- Замок фиксации скорости
+local LockBtn = Instance.new("TextButton", SpeedInput)
 LockBtn.Size = UDim2.new(0, 30, 0, 30)
-LockBtn.Position = UDim2.new(1, -35, 0.5, -15) -- Справа внутри SpeedLabel
+LockBtn.Position = UDim2.new(1, -35, 0.5, -15)
 LockBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-LockBtn.Text = "🔓" -- Разомкнутый замок по умолчанию
+LockBtn.Text = "🔓"
 LockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 LockBtn.Font = Enum.Font.GothamBold
 LockBtn.TextSize = 18
@@ -467,7 +495,6 @@ LockBtn.MouseButton1Click:Connect(function()
     forceSpeed = lockSpeedEnabled
 
     local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-    
     if lockSpeedEnabled and hum then
         savedSpeed = hum.WalkSpeed
         LockBtn.Text = "🔒"
@@ -478,7 +505,7 @@ LockBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Кнопки бега (зажатие)
+-- Кнопки +1 и -1
 local isAdding, isSubbing = false, false
 
 local AddS = Instance.new("TextButton", MainFrame)
@@ -497,24 +524,33 @@ SubS.Text = "-1 БЕГ"
 styleText(SubS, 14)
 Instance.new("UICorner", SubS)
 
--- Логика зажатия
-AddS.MouseButton1Down:Connect(function() isAdding = true while isAdding do 
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-    if hum then 
-    hum.WalkSpeed = hum.WalkSpeed + 1
-    currentSpeed = hum.WalkSpeed
-    
-    if forceSpeed then
-        savedSpeed = hum.WalkSpeed
+AddS.MouseButton1Down:Connect(function()
+    isAdding = true
+    while isAdding do
+        local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+            local newSpeed = hum.WalkSpeed + 1
+            applySpeed(newSpeed)
+            SpeedInput.Text = tostring(newSpeed)
+        end
+        task.wait(0.08)
     end
-end
- task.wait(0.08) end end)
+end)
 AddS.MouseButton1Up:Connect(function() isAdding = false end)
 AddS.MouseLeave:Connect(function() isAdding = false end)
 
-SubS.MouseButton1Down:Connect(function() isSubbing = true while isSubbing do 
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-    if hum then hum.WalkSpeed = math.max(0, hum.WalkSpeed - 1) currentSpeed = hum.WalkSpeed end task.wait(0.08) end end)
+SubS.MouseButton1Down:Connect(function()
+    isSubbing = true
+    while isSubbing do
+        local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+            local newSpeed = math.max(0, hum.WalkSpeed - 1)
+            applySpeed(newSpeed)
+            SpeedInput.Text = tostring(newSpeed)
+        end
+        task.wait(0.08)
+    end
+end)
 SubS.MouseButton1Up:Connect(function() isSubbing = false end)
 SubS.MouseLeave:Connect(function() isSubbing = false end)
 
@@ -582,7 +618,7 @@ local VersionLabel = Instance.new("TextLabel", MainFrame)
 VersionLabel.Size = UDim2.new(1, 0, 0, 20)
 VersionLabel.Position = UDim2.new(0, 0, 1, -25)
 VersionLabel.BackgroundTransparency = 1
-VersionLabel.Text = "v19" -- версия
+VersionLabel.Text = "v20" -- версия
 
 VersionLabel.TextColor3 = Color3.fromRGB(180, 180, 180) -- Светло-серый
 VersionLabel.Font = Enum.Font.Gotham
@@ -862,6 +898,7 @@ end)
 
 local InfJumpBtn = createBtn("Прыжок: ВЫКЛ", UDim2.new(0.05, 0, 0.05, 0), PlayerFrame)
 local FlyBtn     = createBtn("Полет: ВЫКЛ", UDim2.new(0.05, 0, 0.15, 0), PlayerFrame)
+local UnlockCursorBtn = createBtn("Свобода курсора: ВЫКЛ", UDim2.new(0.05, 0, 0.80, 0), PlayerFrame)
 
 -- 2. Кнопка Water Walk (Исправленные цвета: твой зеленый и подходящий красный)
 local WaterBtn = createBtn("Water Walk: OFF", UDim2.new(0.05, 0, 0.25, 0), PlayerFrame)
@@ -913,7 +950,7 @@ local VersionLabel = Instance.new("TextLabel", PlayerFrame) -- Добавим и
 VersionLabel.Size = UDim2.new(1, 0, 0, 20)
 VersionLabel.Position = UDim2.new(0, 0, 1, -20)
 VersionLabel.BackgroundTransparency = 1
-VersionLabel.Text = "v19"
+VersionLabel.Text = "v20"
 VersionLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 VersionLabel.Font = Enum.Font.Gotham
 VersionLabel.TextSize = 10
@@ -935,6 +972,30 @@ localPlayer.Idled:Connect(function()
         VirtualUser:ClickButton2(Vector2.new())
     end
 end)
+
+-- [[ ЛОГИКА СВОБОДЫ КУРСОРA (ТОЛЬКО КНОПКА В МЕНЮ) ]] --
+local cursorUnlocked = false
+
+local function toggleCursor()
+    cursorUnlocked = not cursorUnlocked
+    
+    if cursorUnlocked then
+        UnlockCursorBtn.Text = "Свобода курсора: ВКЛ"
+        UnlockCursorBtn.BackgroundColor3 = Color_On
+        
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+    else
+        UnlockCursorBtn.Text = "Свобода курсора: ВЫКЛ"
+        UnlockCursorBtn.BackgroundColor3 = Color_Off
+        
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+    end
+end
+
+UnlockCursorBtn.MouseButton1Click:Connect(toggleCursor)
 
 -- [[ ЛОГИКА NOCLIP ]] --
 local noclipEnabled = false
@@ -1012,6 +1073,7 @@ addScript("JEZ SMART TRANSLATOR", "https://raw.githubusercontent.com/Korol1Laguw
 addScript("JEZ COORDINATES", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/JEZ%20COORDINATES")
 addScript("JEZ INVENTORY VIEW", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/JEZ%20INVENTORY%20VIEW")
 addScript("Jez Camping", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20Camping")
+addScript("Jez Hider", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20Hider")
 
 SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     local text = SearchBox.Text:lower()
@@ -1138,9 +1200,10 @@ end
         end
         
 -- Спидометр
-        local velocity = hrp.Velocity
-        local horizontalSpeed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
-        SpeedLabel.Text = tostring(math.floor(horizontalSpeed))
+        -- Обновление поля ввода, если игрок не печатает в нем прямо сейчас
+if not SpeedInput:IsFocused() and hum then
+    SpeedInput.Text = tostring(math.floor(hum.WalkSpeed))
+end
 
         -- Логика полета
         if flyEnabled then
@@ -1316,10 +1379,16 @@ RunService.RenderStepped:Connect(function()
             camera.CFrame = CFrame.new(camera.CFrame.Position, target.Position)
         end
     end
+	-- Внутри RunService.RenderStepped:Connect(function() ...
+if cursorUnlocked then
+    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    UserInputService.MouseIconEnabled = true
+    workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+end
 end)
 
-print("Jez Menu: Аимбот на X настроен!")
 
+print("Jez Menu: Аимбот на X настроен!")
 print("Jez Menu: Скрипт успешно запущен без ошибок!")
 
 
