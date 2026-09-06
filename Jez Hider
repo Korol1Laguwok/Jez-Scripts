@@ -7,71 +7,123 @@ local camera = Workspace.CurrentCamera
 local playerGui = player:WaitForChild("PlayerGui")
 
 local isEnabled = false
-local isClickProcessed = false -- Флаг защиты от зажатия
+local isClickProcessed = false
 
 -- Слабая таблица для предотвращения утечек памяти
 local deletedObjects = setmetatable({}, { __mode = "k" })
 
 -- ============================================================================
--- СОЗДАНИЕ UI
+-- АВТОМАТИЧЕСКАЯ НАСТРОЙКА ВСЕХ ЧАСТЕЙ КАРТЫ ДЛЯ ОБНАРУЖЕНИЯ
+-- ============================================================================
+local function makeQueryable(obj)
+    if obj:IsA("BasePart") then
+        obj.CanQuery = true
+    end
+end
+
+for _, v in ipairs(Workspace:GetDescendants()) do
+    makeQueryable(v)
+end
+Workspace.DescendantAdded:Connect(makeQueryable)
+
+-- ============================================================================
+-- СОЗДАНИЕ UI (ОБНОВЛЕННЫЙ СТИЛЬ JEZ)
 -- ============================================================================
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "ObjectHiderMenu"
+screenGui.Name = "ObjectHiderMenu_Jez"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 220, 0, 260)
+mainFrame.Size = UDim2.new(0, 230, 0, 270)
 mainFrame.Position = UDim2.new(0.8, 0, 0.3, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
 mainFrame.Parent = screenGui
 
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = mainFrame
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(45, 45, 55)
+mainStroke.Thickness = 1.5
+mainStroke.Parent = mainFrame
+
+-- Заголовок
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 25)
-title.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-title.Text = "Удаление объектов (R + LMB)"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 11
-title.Font = Enum.Font.SourceSansBold
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+title.Text = "  Jez Hider (R + LMB)"
+title.TextColor3 = Color3.fromRGB(220, 220, 235)
+title.TextSize = 12
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = mainFrame
 
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = title
+
+-- Кнопка Режима (СИНЯЯ = ВЫКЛ, КРАСНАЯ = ВКЛ)
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0.9, 0, 0, 30)
-toggleBtn.Position = UDim2.new(0.05, 0, 0.12, 0)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+toggleBtn.Size = UDim2.new(0.9, 0, 0, 32)
+toggleBtn.Position = UDim2.new(0.05, 0, 0.14, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 220) -- По умолчанию СИНЯЯ (ВЫКЛ)
 toggleBtn.Text = "Режим: ВЫКЛ"
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleBtn.TextSize = 13
-toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.Parent = mainFrame
 
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 8)
+toggleCorner.Parent = toggleBtn
+
+-- Список удаленных элементов
 local scrollList = Instance.new("ScrollingFrame")
 scrollList.Size = UDim2.new(0.9, 0, 0, 130)
-scrollList.Position = UDim2.new(0.05, 0, 0.26, 0)
-scrollList.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+scrollList.Position = UDim2.new(0.05, 0, 0.28, 0)
+scrollList.BackgroundColor3 = Color3.fromRGB(12, 12, 15)
 scrollList.BorderSizePixel = 0
 scrollList.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollList.ScrollBarThickness = 4
+scrollList.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
 scrollList.Parent = mainFrame
+
+local scrollCorner = Instance.new("UICorner")
+scrollCorner.CornerRadius = UDim.new(0, 8)
+scrollCorner.Parent = scrollList
 
 local listLayout = Instance.new("UIListLayout")
 listLayout.Padding = UDim.new(0, 4)
 listLayout.Parent = scrollList
 
+local listPadding = Instance.new("UIPadding")
+listPadding.PaddingTop = UDim.new(0, 4)
+listPadding.PaddingLeft = UDim.new(0, 4)
+listPadding.PaddingRight = UDim.new(0, 4)
+listPadding.Parent = scrollList
+
 listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    scrollList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    scrollList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 8)
 end)
 
+-- Кнопка Восстановить ВСЁ
 local restoreAllBtn = Instance.new("TextButton")
-restoreAllBtn.Size = UDim2.new(0.9, 0, 0, 30)
-restoreAllBtn.Position = UDim2.new(0.05, 0, 0.85, 0)
-restoreAllBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 180)
+restoreAllBtn.Size = UDim2.new(0.9, 0, 0, 32)
+restoreAllBtn.Position = UDim2.new(0.05, 0, 0.84, 0)
+restoreAllBtn.BackgroundColor3 = Color3.fromRGB(35, 140, 85)
 restoreAllBtn.Text = "Восстановить ВСЁ"
 restoreAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 restoreAllBtn.TextSize = 12
-restoreAllBtn.Font = Enum.Font.SourceSansBold
+restoreAllBtn.Font = Enum.Font.GothamBold
 restoreAllBtn.Parent = mainFrame
+
+local restoreCorner = Instance.new("UICorner")
+restoreCorner.CornerRadius = UDim.new(0, 8)
+restoreCorner.Parent = restoreAllBtn
 
 -- ============================================================================
 -- DRAGGABLE ДЛЯ FRAME
@@ -119,7 +171,8 @@ end)
 toggleBtn.MouseButton1Click:Connect(function()
     isEnabled = not isEnabled
     toggleBtn.Text = isEnabled and "Режим: ВКЛ" or "Режим: ВЫКЛ"
-    toggleBtn.BackgroundColor3 = isEnabled and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
+    -- ВКЛ = Красный (Color3.fromRGB(220, 50, 50)), ВЫКЛ = Синий (Color3.fromRGB(40, 100, 220))
+    toggleBtn.BackgroundColor3 = isEnabled and Color3.fromRGB(220, 50, 50) or Color3.fromRGB(40, 100, 220)
 end)
 
 local function isSafeToHide(target)
@@ -132,9 +185,7 @@ end
 local function hideObject(target)
     if not isSafeToHide(target) then return end
 
-    -- Удаляем строго тот Part, по которому кликнули
     local objToHide = target
-
     if deletedObjects[objToHide] or not isSafeToHide(objToHide) then return end
 
     local originalParent = objToHide.Parent
@@ -142,13 +193,18 @@ local function hideObject(target)
     objToHide.Parent = nil
 
     local itemBtn = Instance.new("TextButton")
-    itemBtn.Size = UDim2.new(1, -6, 0, 25)
-    itemBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-    itemBtn.Text = " [Вернуть] " .. string.sub(objToHide.Name, 1, 20)
-    itemBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    itemBtn.Size = UDim2.new(1, 0, 0, 24)
+    itemBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+    itemBtn.Text = "  [Вернуть] " .. string.sub(objToHide.Name, 1, 18)
+    itemBtn.TextColor3 = Color3.fromRGB(200, 200, 215)
     itemBtn.TextSize = 11
-    itemBtn.Font = Enum.Font.SourceSans
+    itemBtn.Font = Enum.Font.Gotham
+    itemBtn.TextXAlignment = Enum.TextXAlignment.Left
     itemBtn.Parent = scrollList
+
+    local itemCorner = Instance.new("UICorner")
+    itemCorner.CornerRadius = UDim.new(0, 5)
+    itemCorner.Parent = itemBtn
 
     itemBtn.MouseButton1Click:Connect(function()
         if objToHide and deletedObjects[objToHide] then
@@ -174,25 +230,48 @@ restoreAllBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- ============================================================================
+-- ПОИСК ОБЪЕКТА ПОД КУРСОРМ
+-- ============================================================================
 local function getTargetUnderMouse()
     local mousePosition = UserInputService:GetMouseLocation()
     local unitRay = camera:ViewportPointToRay(mousePosition.X, mousePosition.Y)
 
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.RespectCanCollide = false
 
     if player.Character then
         raycastParams.FilterDescendantsInstances = { player.Character }
     end
 
     local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, raycastParams)
-    return result and result.Instance or nil
+    if result and result.Instance then
+        return result.Instance
+    end
+
+    local overlapParams = OverlapParams.new()
+    overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+    if player.Character then
+        overlapParams.FilterDescendantsInstances = { player.Character }
+    end
+
+    for distance = 5, 500, 8 do
+        local point = unitRay.Origin + unitRay.Direction * distance
+        local parts = Workspace:GetPartBoundsInBox(CFrame.new(point), Vector3.new(2, 2, 8), overlapParams)
+        for _, part in ipairs(parts) do
+            if part:IsA("BasePart") and isSafeToHide(part) then
+                return part
+            end
+        end
+    end
+
+    return nil
 end
 
 -- ============================================================================
--- ОБРАБОТКА ОДИНОЧНОГО НАЖАТИЯ
+-- ОБРАБОТКА НАЖАТИЯ
 -- ============================================================================
-
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
 
