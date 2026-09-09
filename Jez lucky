@@ -1,160 +1,328 @@
--- JEZ LUCKY BLOCK SCRIPT 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+-- ============================================
+--           J-LUCKY BLOCK SCRIPT
+--              by Jezafes
+-- ============================================
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local ContextActionService = game:GetService("ContextActionService")
 
--- Генерация случайного имени для защиты от обнаружения
+local LocalPlayer = Players.LocalPlayer
+
+-- Генерация случайного ID
 local function GenerateID()
     return HttpService:GenerateGUID(false)
 end
 
--- Цветовая палитра
-local Color_Background = Color3.fromRGB(12, 12, 12)
-local Color_Accent = Color3.fromRGB(46, 204, 113)
-local Color_Button = Color3.fromRGB(39, 174, 96)
-local Color_Stop = Color3.fromRGB(200, 50, 50)
-local Color_Clear = Color3.fromRGB(60, 60, 60)
-
--- РАСШИРЕННЫЙ СПИСОК БЛОКОВ (Обычные + Редкие)
-local BlockEvents = {
-    "SpawnLuckyBlock",    -- Обычный
-    "SpawnSuperBlock",    -- Супер
-    "SpawnDiamondBlock",  -- Алмазный
-    "SpawnGalaxyBlock",   -- Галактический
-    "SpawnRainbowBlock",  -- Радужный
-    "SpawnVoidBlock",     -- Пустотный
-   
-    
+-- Цветовая палитра (Monochrome Dark)
+local Theme = {
+    Background    = Color3.fromRGB(15, 15, 17),
+    Container     = Color3.fromRGB(25, 25, 28),
+    Input         = Color3.fromRGB(35, 35, 40),
+    Text          = Color3.fromRGB(240, 240, 240),
+    TextMuted     = Color3.fromRGB(140, 140, 145),
+    AccentWhite   = Color3.fromRGB(255, 255, 255),
+    ButtonPrimary = Color3.fromRGB(230, 230, 230),
+    ButtonText    = Color3.fromRGB(15, 15, 15),
+    Stroke        = Color3.fromRGB(55, 55, 60),
+    Stop          = Color3.fromRGB(180, 40, 40)
 }
 
--- Создание GUI
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = GenerateID()
-pcall(function() ScreenGui.Parent = CoreGui end)
+-- Список событий спавна
+local BlockEvents = {
+    "SpawnLuckyBlock",
+    "SpawnSuperBlock",
+    "SpawnDiamondBlock",
+    "SpawnGalaxyBlock",
+    "SpawnRainbowBlock",
+    "SpawnVoidBlock",
+}
 
--- Функция для вывода "достижения"
-local function ShowAchievement(title, text)
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = title;
-        Text = text;
-        Icon = "rbxassetid://6023426926"; -- Иконка щита/галочки
-        Duration = 5; -- Сколько секунд будет висеть
-    })
+-- Поиск родителя для GUI
+local TargetParent = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+
+-- Удаление прошлых копий
+if TargetParent:FindFirstChild("JLuckyBlockGui") then
+    TargetParent.JLuckyBlockGui:Destroy()
 end
 
--- Вызываем уведомление сразу при запуске скрипта
-ShowAchievement("Успешный запуск!", "Jez Lucky активирован. Приятной игры, Jezafes!")
+-- Основной ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "JLuckyBlockGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = TargetParent
+
+-- Функция плавных анимаций
+local function CreateTween(object, info, properties)
+    local tween = TweenService:Create(object, info, properties)
+    tween:Play()
+    return tween
+end
+
+-- Анимация наведения и нажатия
+local function AddButtonAnimation(button, normalColor, hoverColor)
+    button.MouseEnter:Connect(function()
+        CreateTween(button, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = hoverColor})
+    end)
+    button.MouseLeave:Connect(function()
+        CreateTween(button, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = normalColor})
+    end)
+    button.MouseButton1Down:Connect(function()
+        CreateTween(button, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {Size = UDim2.new(button.Size.X.Scale, button.Size.X.Offset - 2, button.Size.Y.Scale, button.Size.Y.Offset - 2)})
+    end)
+    button.MouseButton1Up:Connect(function()
+        CreateTween(button, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {Size = UDim2.new(button.Size.X.Scale, button.Size.X.Offset + 2, button.Size.Y.Scale, button.Size.Y.Offset + 2)})
+    end)
+end
+
+-- Уведомления
+local function ShowNotification(title, text)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 3,
+        })
+    end)
+end
+
+-- ============================================
+--       ЭКРАН ЗАГРУЗКИ (СПРАВА)
+-- ============================================
+
+local LoadingFrame = Instance.new("Frame", ScreenGui)
+LoadingFrame.Name = GenerateID()
+LoadingFrame.Size = UDim2.new(0, 230, 0, 120)
+LoadingFrame.AnchorPoint = Vector2.new(1, 0.5)
+LoadingFrame.Position = UDim2.new(1, -20, 0.5, 0)
+LoadingFrame.BackgroundColor3 = Theme.Background
+LoadingFrame.ClipsDescendants = true
+Instance.new("UICorner", LoadingFrame).CornerRadius = UDim.new(0, 10)
+
+local LoadingStroke = Instance.new("UIStroke", LoadingFrame)
+LoadingStroke.Color = Theme.Stroke
+LoadingStroke.Thickness = 1
+
+local LoadTitle = Instance.new("TextLabel", LoadingFrame)
+LoadTitle.Size = UDim2.new(1, 0, 0, 30)
+LoadTitle.Position = UDim2.new(0, 0, 0, 15)
+LoadTitle.Text = "J-LUCKY BLOCK"
+LoadTitle.TextColor3 = Theme.AccentWhite
+LoadTitle.BackgroundTransparency = 1
+LoadTitle.Font = Enum.Font.GothamBold
+LoadTitle.TextSize = 16
+
+local LoadStatus = Instance.new("TextLabel", LoadingFrame)
+LoadStatus.Size = UDim2.new(1, 0, 0, 20)
+LoadStatus.Position = UDim2.new(0, 0, 0, 45)
+LoadStatus.Text = "Загрузка..."
+LoadStatus.TextColor3 = Theme.TextMuted
+LoadStatus.BackgroundTransparency = 1
+LoadStatus.Font = Enum.Font.Gotham
+LoadStatus.TextSize = 12
+
+local ProgressBarBG = Instance.new("Frame", LoadingFrame)
+ProgressBarBG.Size = UDim2.new(0, 170, 0, 5)
+ProgressBarBG.Position = UDim2.new(0.5, -85, 0, 80)
+ProgressBarBG.BackgroundColor3 = Theme.Container
+Instance.new("UICorner", ProgressBarBG).CornerRadius = UDim.new(1, 0)
+
+local ProgressBar = Instance.new("Frame", ProgressBarBG)
+ProgressBar.Size = UDim2.new(0, 0, 1, 0)
+ProgressBar.BackgroundColor3 = Theme.AccentWhite
+Instance.new("UICorner", ProgressBar).CornerRadius = UDim.new(1, 0)
+
+-- ============================================
+--       ОСНОВНОЕ МЕНЮ (СПРАВА)
+-- ============================================
 
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Name = GenerateID()
-MainFrame.Size = UDim2.new(0, 300, 0, 310)
-MainFrame.AnchorPoint = Vector2.new(1, 0)
-MainFrame.Position = UDim2.new(1, -20, 0.5, -155)
-MainFrame.BackgroundColor3 = Color_Background
+MainFrame.Size = UDim2.new(0, 230, 0, 255)
+MainFrame.AnchorPoint = Vector2.new(1, 0.5)
+MainFrame.Position = UDim2.new(1, -20, 0.5, 0)
+MainFrame.BackgroundColor3 = Theme.Background
 MainFrame.Active = true
 MainFrame.Draggable = true
+MainFrame.Visible = false
+MainFrame.BackgroundTransparency = 1
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
--- Кнопка закрытия (Крестик)
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Color = Theme.Stroke
+MainStroke.Thickness = 1
+
+-- Кнопка закрытия
 local CloseBtn = Instance.new("TextButton", MainFrame)
-CloseBtn.Size = UDim2.new(0, 35, 0, 35)
-CloseBtn.Position = UDim2.new(1, -40, 0, 5)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+CloseBtn.Size = UDim2.new(0, 22, 0, 22)
+CloseBtn.Position = UDim2.new(1, -28, 0, 8)
+CloseBtn.BackgroundColor3 = Theme.Container
 CloseBtn.Text = "×"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-CloseBtn.TextSize = 26
+CloseBtn.TextColor3 = Theme.Text
+CloseBtn.TextSize = 16
 CloseBtn.Font = Enum.Font.GothamBold
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+AddButtonAnimation(CloseBtn, Theme.Container, Color3.fromRGB(60, 20, 20))
 
 -- Заголовок
 local Title = Instance.new("TextLabel", MainFrame)
-Title.Size = UDim2.new(1, 0, 0, 50)
-Title.Text = "JEZ LUCKY"
-Title.TextColor3 = Color_Accent
+Title.Size = UDim2.new(1, -40, 0, 36)
+Title.Position = UDim2.new(0, 12, 0, 0)
+Title.Text = "J-LUCKY BLOCK"
+Title.TextColor3 = Theme.AccentWhite
 Title.BackgroundTransparency = 1
 Title.Font = Enum.Font.GothamBold
-Title.TextSize = 24
+Title.TextSize = 15
+Title.TextXAlignment = Enum.TextXAlignment.Left
 
--- Поле ввода количества
+-- Блок с инструкцией
+local InfoBox = Instance.new("Frame", MainFrame)
+InfoBox.Size = UDim2.new(0, 206, 0, 52)
+InfoBox.Position = UDim2.new(0.5, -103, 0, 38)
+InfoBox.BackgroundColor3 = Theme.Container
+Instance.new("UICorner", InfoBox).CornerRadius = UDim.new(0, 6)
+
+local InfoStroke = Instance.new("UIStroke", InfoBox)
+InfoStroke.Color = Theme.Stroke
+InfoStroke.Thickness = 1
+
+local InfoText = Instance.new("TextLabel", InfoBox)
+InfoText.Size = UDim2.new(1, -12, 1, -8)
+InfoText.Position = UDim2.new(0, 6, 0, 4)
+InfoText.BackgroundTransparency = 1
+InfoText.Text = "1. Введите нужное кол-во\n2. Нажмите «ЗАПУСТИТЬ»\n3. «ОСТАНОВИТЬ» — прервать"
+InfoText.TextColor3 = Theme.TextMuted
+InfoText.Font = Enum.Font.GothamMedium
+InfoText.TextSize = 10
+InfoText.TextWrapped = true
+InfoText.TextXAlignment = Enum.TextXAlignment.Left
+InfoText.TextYAlignment = Enum.TextYAlignment.Center
+
+-- Поле ввода
 local AmountInput = Instance.new("TextBox", MainFrame)
-AmountInput.Size = UDim2.new(0, 260, 0, 45)
-AmountInput.Position = UDim2.new(0.5, -130, 0, 60)
-AmountInput.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+AmountInput.Size = UDim2.new(0, 206, 0, 32)
+AmountInput.Position = UDim2.new(0.5, -103, 0, 98)
+AmountInput.BackgroundColor3 = Theme.Input
 AmountInput.Text = "100"
-AmountInput.TextColor3 = Color3.new(1, 1, 1)
-AmountInput.Font = Enum.Font.GothamBold
-AmountInput.TextSize = 22
-Instance.new("UICorner", AmountInput).CornerRadius = UDim.new(0, 8)
+AmountInput.PlaceholderText = "Количество"
+AmountInput.TextColor3 = Theme.Text
+AmountInput.Font = Enum.Font.GothamMedium
+AmountInput.TextSize = 14
+Instance.new("UICorner", AmountInput).CornerRadius = UDim.new(0, 6)
+
+local InputStroke = Instance.new("UIStroke", AmountInput)
+InputStroke.Color = Theme.Stroke
+InputStroke.Thickness = 1
 
 -- Кнопка ЗАПУСТИТЬ
 local StartBtn = Instance.new("TextButton", MainFrame)
-StartBtn.Size = UDim2.new(0, 260, 0, 55)
-StartBtn.Position = UDim2.new(0.5, -130, 0, 120)
-StartBtn.BackgroundColor3 = Color_Button
+StartBtn.Size = UDim2.new(0, 206, 0, 34)
+StartBtn.Position = UDim2.new(0.5, -103, 0, 138)
+StartBtn.BackgroundColor3 = Theme.ButtonPrimary
 StartBtn.Text = "ЗАПУСТИТЬ"
-StartBtn.TextColor3 = Color3.new(1, 1, 1)
+StartBtn.TextColor3 = Theme.ButtonText
 StartBtn.Font = Enum.Font.GothamBold
-StartBtn.TextSize = 20
-Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(0, 8)
-
--- Кнопка ОЧИСТИТЬ ВСЁ
-local ClearBtn = Instance.new("TextButton", MainFrame)
-ClearBtn.Size = UDim2.new(0, 260, 0, 45)
-ClearBtn.Position = UDim2.new(0.5, -130, 0, 185)
-ClearBtn.BackgroundColor3 = Color_Clear
-ClearBtn.Text = "ОЧИСТИТЬ ВСЁ"
-ClearBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-ClearBtn.Font = Enum.Font.GothamBold
-ClearBtn.TextSize = 18
-Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 8)
+StartBtn.TextSize = 13
+Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(0, 6)
+AddButtonAnimation(StartBtn, Theme.ButtonPrimary, Color3.fromRGB(200, 200, 200))
 
 -- Кнопка СТОП
 local StopBtn = Instance.new("TextButton", MainFrame)
-StopBtn.Size = UDim2.new(0, 260, 0, 45)
-StopBtn.Position = UDim2.new(0.5, -130, 0, 245)
-StopBtn.BackgroundColor3 = Color_Stop
-StopBtn.Text = "СТОП"
-StopBtn.TextColor3 = Color3.new(1, 1, 1)
+StopBtn.Size = UDim2.new(0, 206, 0, 30)
+StopBtn.Position = UDim2.new(0.5, -103, 0, 178)
+StopBtn.BackgroundColor3 = Theme.Stop
+StopBtn.Text = "ОСТАНОВИТЬ"
+StopBtn.TextColor3 = Theme.AccentWhite
 StopBtn.Font = Enum.Font.GothamBold
-StopBtn.TextSize = 18
+StopBtn.TextSize = 13
 StopBtn.Visible = false
-Instance.new("UICorner", StopBtn).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", StopBtn).CornerRadius = UDim.new(0, 6)
+AddButtonAnimation(StopBtn, Theme.Stop, Color3.fromRGB(210, 50, 50))
 
--- ЛОГИКА
+-- Подпись автора внизу
+local AuthorLabel = Instance.new("TextLabel", MainFrame)
+AuthorLabel.Size = UDim2.new(1, 0, 0, 18)
+AuthorLabel.Position = UDim2.new(0, 0, 1, -20)
+AuthorLabel.Text = "by Jezafes"
+AuthorLabel.TextColor3 = Theme.TextMuted
+AuthorLabel.BackgroundTransparency = 1
+AuthorLabel.Font = Enum.Font.GothamMedium
+AuthorLabel.TextSize = 11
+
+-- ============================================
+--      БЛОКИРОВКА ПЕРЕКЛЮЧЕНИЯ ХОТБАРА
+-- ============================================
+
+local HotbarKeys = {
+    Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four, Enum.KeyCode.Five,
+    Enum.KeyCode.Six, Enum.KeyCode.Seven, Enum.KeyCode.Eight, Enum.KeyCode.Nine, Enum.KeyCode.Zero
+}
+
+AmountInput.Focused:Connect(function()
+    ContextActionService:BindActionAtPriority(
+        "BlockHotbarTyping",
+        function() return Enum.ContextActionResult.Sink end,
+        false,
+        10000,
+        unpack(HotbarKeys)
+    )
+end)
+
+AmountInput.FocusLost:Connect(function()
+    ContextActionService:UnbindAction("BlockHotbarTyping")
+end)
+
+-- ============================================
+--           ЛОГИКА И АНИМАЦИИ
+-- ============================================
+
 local isStopped = false
 local isRunning = false
 
--- Закрытие
-CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+-- Симуляция загрузки
+task.spawn(function()
+    CreateTween(ProgressBar, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {Size = UDim2.new(0.4, 0, 1, 0)})
+    task.wait(0.5)
+    LoadStatus.Text = "Подготовка..."
+    
+    CreateTween(ProgressBar, TweenInfo.new(0.6, Enum.EasingStyle.Quad), {Size = UDim2.new(0.8, 0, 1, 0)})
+    task.wait(0.6)
+    LoadStatus.Text = "Готово!"
+    
+    CreateTween(ProgressBar, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 1, 0)})
+    task.wait(0.3)
+    
+    -- Исчезновение экрана загрузки
+    CreateTween(LoadingFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {BackgroundTransparency = 1})
+    CreateTween(LoadTitle, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {TextTransparency = 1})
+    CreateTween(LoadStatus, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {TextTransparency = 1})
+    CreateTween(ProgressBarBG, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 1})
+    CreateTween(ProgressBar, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 1})
+    CreateTween(LoadingStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Transparency = 1})
+    
+    task.wait(0.3)
+    LoadingFrame:Destroy()
+    
+    -- Плавное открытие основного окна
+    MainFrame.Visible = true
+    CreateTween(MainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {BackgroundTransparency = 0})
+    
+    ShowNotification("J-LUCKY BLOCK", "Скрипт активирован!")
+end)
 
--- Очистка блоков в мире
-ClearBtn.MouseButton1Click:Connect(function()
-    local count = 0
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and (obj.Name:find("Block") or obj.Name:find("Lucky")) then
-            obj:Destroy()
-            count = count + 1
-        end
-    end
-    ClearBtn.Text = "УДАЛЕНО: " .. count
-    task.wait(1.5)
-    ClearBtn.Text = "ОЧИСТИТЬ ВСЁ"
+-- Закрытие GUI
+CloseBtn.MouseButton1Click:Connect(function()
+    ContextActionService:UnbindAction("BlockHotbarTyping")
+    CreateTween(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 0, 0, 0),
+        BackgroundTransparency = 1
+    })
+    task.wait(0.25)
+    ScreenGui:Destroy()
 end)
 
 -- Спавн блоков
@@ -171,7 +339,7 @@ StartBtn.MouseButton1Click:Connect(function()
         for i = 1, total do
             if isStopped then break end
             
-            local eventName = BlockEvents[i % #BlockEvents + 1]
+            local eventName = BlockEvents[(i - 1) % #BlockEvents + 1]
             local remote = ReplicatedStorage:FindFirstChild(eventName)
             
             if remote then
@@ -179,20 +347,20 @@ StartBtn.MouseButton1Click:Connect(function()
                 StartBtn.Text = i .. " / " .. total
             end
             
-            -- Задержка каждые 20 блоков, чтобы не кикнуло за спам
             if i % 20 == 0 then
                 task.wait(math.random(5, 10) / 100)
             end
         end
         
         StartBtn.Text = "ГОТОВО!"
-        task.wait(2)
+        task.wait(1.5)
         StartBtn.Text = "ЗАПУСТИТЬ"
         StopBtn.Visible = false
         isRunning = false
     end)
 end)
 
+-- Остановка процесса
 StopBtn.MouseButton1Click:Connect(function()
     isStopped = true
 end)
