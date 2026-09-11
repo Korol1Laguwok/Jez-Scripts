@@ -1,114 +1,206 @@
-
-
-
-
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
 local Player = Players.LocalPlayer
 
+-- === ЦВЕТОВАЯ ПАЛИТРА (BLACK & WHITE THEME) ===
+local Theme = {
+    Background = Color3.fromRGB(15, 15, 17),
+    Card = Color3.fromRGB(24, 24, 28),
+    CardHover = Color3.fromRGB(34, 34, 40),
+    Stroke = Color3.fromRGB(45, 45, 50),
+    StrokeHover = Color3.fromRGB(255, 255, 255),
+    TextPrimary = Color3.fromRGB(255, 255, 255),
+    TextSecondary = Color3.fromRGB(140, 140, 150),
+    CloseHover = Color3.fromRGB(200, 50, 50),
+    Accent = Color3.fromRGB(255, 255, 255)
+}
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = Player:WaitForChild("PlayerGui") -- Добавь эту строку!
+ScreenGui.Name = "JezFlingGuiCompact"
+ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 ScreenGui.ResetOnSpawn = false
 
--- === ОБНОВЛЕННЫЙ ИНТЕРФЕЙС (ШИРЕ И РОВНЕЕ) ===
+-- ==========================================
+--          1. МИНИ-ЗАСТАВКА (SPLASH SCREEN)
+-- ==========================================
+local SplashFrame = Instance.new("Frame", ScreenGui)
+SplashFrame.Name = "SplashFrame"
+SplashFrame.Size = UDim2.new(0, 240, 0, 110)
+SplashFrame.Position = UDim2.new(0.5, -120, 0.5, -55)
+SplashFrame.BackgroundColor3 = Theme.Background
+SplashFrame.BorderSizePixel = 0
+SplashFrame.ClipsDescendants = true
+SplashFrame.ZIndex = 20
+Instance.new("UICorner", SplashFrame).CornerRadius = UDim.new(0, 10)
+
+local SplashStroke = Instance.new("UIStroke", SplashFrame)
+SplashStroke.Color = Theme.Stroke
+SplashStroke.Thickness = 1.2
+
+local SplashTitle = Instance.new("TextLabel", SplashFrame)
+SplashTitle.Size = UDim2.new(1, 0, 0, 24)
+SplashTitle.Position = UDim2.new(0, 0, 0, 20)
+SplashTitle.BackgroundTransparency = 1
+SplashTitle.Text = "⚡ JEZ FLING"
+SplashTitle.Font = Enum.Font.GothamBold
+SplashTitle.TextSize = 14
+SplashTitle.TextColor3 = Theme.TextPrimary
+SplashTitle.ZIndex = 21
+
+local SplashSub = Instance.new("TextLabel", SplashFrame)
+SplashSub.Size = UDim2.new(1, 0, 0, 18)
+SplashSub.Position = UDim2.new(0, 0, 0, 44)
+SplashSub.BackgroundTransparency = 1
+SplashSub.Text = "Загрузка интерфейса..."
+SplashSub.Font = Enum.Font.Gotham
+SplashSub.TextSize = 10
+SplashSub.TextColor3 = Theme.TextSecondary
+SplashSub.ZIndex = 21
+
+local BarBack = Instance.new("Frame", SplashFrame)
+BarBack.Size = UDim2.new(0.8, 0, 0, 3)
+BarBack.Position = UDim2.new(0.1, 0, 0, 75)
+BarBack.BackgroundColor3 = Theme.Card
+BarBack.BorderSizePixel = 0
+BarBack.ZIndex = 21
+Instance.new("UICorner", BarBack).CornerRadius = UDim.new(1, 0)
+
+local BarFill = Instance.new("Frame", BarBack)
+BarFill.Size = UDim2.new(0, 0, 1, 0)
+BarFill.BackgroundColor3 = Theme.Accent
+BarFill.BorderSizePixel = 0
+BarFill.ZIndex = 22
+Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1, 0)
+
+-- ==========================================
+--        2. КОМПАКТНОЕ ГЛАВНОЕ ОКНО
+-- ==========================================
 local Main = Instance.new("Frame", ScreenGui)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
--- Сместили Y на -250, чтобы при высоте 500 окно было ровно по центру
-Main.Position = UDim2.new(0.5, -225, 0.5, -250) 
-Main.Size = UDim2.new(0, 450, 0, 500) -- Высота теперь 500 (была 350)
+Main.Name = "MainFrame"
+Main.BackgroundColor3 = Theme.Background
+Main.Position = UDim2.new(0.5, -180, 0.5, -200)
+Main.Size = UDim2.new(0, 360, 0, 400) -- Компактный размер 360x400
 Main.Active = true
 Main.Draggable = true
+Main.Visible = false
+Main.ClipsDescendants = true
 
 local MainCorner = Instance.new("UICorner", Main)
 MainCorner.CornerRadius = UDim.new(0, 10)
 
-local Stroke = Instance.new("UIStroke", Main)
-Stroke.Color = Color3.fromRGB(0, 180, 0)
-Stroke.Thickness = 2
+local MainStroke = Instance.new("UIStroke", Main)
+MainStroke.Color = Theme.Stroke
+MainStroke.Thickness = 1.2
 
+-- === ЗАГОЛОВОК ===
 local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1, 0, 0, 50)
+Title.Name = "Title"
+Title.Size = UDim2.new(1, -70, 0, 40)
+Title.Position = UDim2.new(0, 14, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "JEZ FLING LIST"
-Title.TextColor3 = Color3.new(1, 1, 1)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 22
+Title.Text = "⚡ JEZ FLING LIST"
+Title.TextColor3 = Theme.TextPrimary
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 13
+Title.TextXAlignment = Enum.TextXAlignment.Left
 
--- === КНОПКА ЗАКРЫТИЯ (КРЕСТИК) ===
+-- === КНОПКА ЗАКРЫТИЯ ===
 local CloseBtn = Instance.new("TextButton", Main)
-CloseBtn.Size = UDim2.new(0, 35, 0, 35)
-CloseBtn.Position = UDim2.new(1, -40, 0, 7)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-CloseBtn.Text = "×" -- Символ крестика
-CloseBtn.TextColor3 = Color3.new(1, 1, 1)
-CloseBtn.Font = Enum.Font.SourceSansBold
-CloseBtn.TextSize = 25
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -32, 0, 8)
+CloseBtn.BackgroundColor3 = Theme.Card
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Theme.TextSecondary
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 12
+CloseBtn.ZIndex = 10
 CloseBtn.AutoButtonColor = false
 
 local CloseCorner = Instance.new("UICorner", CloseBtn)
 CloseCorner.CornerRadius = UDim.new(0, 6)
 
 local CloseStroke = Instance.new("UIStroke", CloseBtn)
-CloseStroke.Color = Color3.fromRGB(150, 0, 0) -- Темно-красная обводка
-CloseStroke.Thickness = 1.5
+CloseStroke.Color = Theme.Stroke
+CloseStroke.Thickness = 1
 
--- Логика закрытия
 CloseBtn.MouseEnter:Connect(function()
-    CloseBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+    TweenService:Create(CloseBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.CloseHover, TextColor3 = Color3.new(1, 1, 1)}):Play()
+    TweenService:Create(CloseStroke, TweenInfo.new(0.2), {Color = Theme.CloseHover}):Play()
 end)
 
 CloseBtn.MouseLeave:Connect(function()
-    CloseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    TweenService:Create(CloseBtn, TweenInfo.new(0.2), {BackgroundColor3 = Theme.Card, TextColor3 = Theme.TextSecondary}):Play()
+    TweenService:Create(CloseStroke, TweenInfo.new(0.2), {Color = Theme.Stroke}):Play()
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
-    ScreenGui:Destroy() -- Полностью удаляет меню из игры
+    ScreenGui:Destroy()
 end)
 
+-- === ОБЛАСТЬ СКРОЛЛА ===
 local Scroll = Instance.new("ScrollingFrame", Main)
--- Увеличили область скролла под новый размер окна
-Scroll.Size = UDim2.new(1, -30, 1, -70) 
-Scroll.Position = UDim2.new(0, 15, 0, 55)
-Scroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Scroll.Name = "PlayerScroll"
+Scroll.Size = UDim2.new(1, -20, 1, -65)
+Scroll.Position = UDim2.new(0, 10, 0, 40)
+Scroll.BackgroundTransparency = 1
 Scroll.BorderSizePixel = 0
-Scroll.ScrollBarThickness = 4
-Scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 180, 0)
+Scroll.ScrollBarThickness = 3
+Scroll.ScrollBarImageColor3 = Color3.fromRGB(90, 90, 100)
 Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 
--- === ПОДПИСЬ АВТОРА ===
-local AuthorTag = Instance.new("TextLabel", Main)
-AuthorTag.Size = UDim2.new(0, 100, 0, 20)
-AuthorTag.Position = UDim2.new(1, -110, 1, -25) -- Правый нижний угол
-AuthorTag.BackgroundTransparency = 1
-AuthorTag.Text = "by Jezafes"
-AuthorTag.TextColor3 = Color3.fromRGB(100, 100, 100) -- Спокойный серый
-AuthorTag.Font = Enum.Font.SourceSansItalic
-AuthorTag.TextSize = 14
-AuthorTag.TextXAlignment = Enum.TextXAlignment.Right
-
 local Layout = Instance.new("UIListLayout", Scroll)
-Layout.Padding = UDim.new(0, 8)
+Layout.Padding = UDim.new(0, 6)
 Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
 local Padding = Instance.new("UIPadding", Scroll)
-Padding.PaddingTop = UDim.new(0, 5)
+Padding.PaddingTop = UDim.new(0, 2)
+Padding.PaddingBottom = UDim.new(0, 2)
 
--- ЛОГИКА
+-- === ПОДПИСЬ АВТОРА ===
+local AuthorTag = Instance.new("TextLabel", Main)
+AuthorTag.Size = UDim2.new(0, 100, 0, 16)
+AuthorTag.Position = UDim2.new(1, -110, 1, -18)
+AuthorTag.BackgroundTransparency = 1
+AuthorTag.Text = "by Jezafes"
+AuthorTag.TextColor3 = Color3.fromRGB(80, 80, 90)
+AuthorTag.Font = Enum.Font.GothamMedium
+AuthorTag.TextSize = 10
+AuthorTag.TextXAlignment = Enum.TextXAlignment.Right
 
-local function GetPlayer(Name)
-    Name = Name:lower()
-    for _, x in next, Players:GetPlayers() do
-        if x ~= Player then
-            if x.Name:lower():match("^" .. Name) or x.DisplayName:lower():match("^" .. Name) then
-                return x
-            end
-        end
-    end
-    return nil
-end
+-- ==========================================
+--            3. АНИМАЦИЯ ЗАПУСКА
+-- ==========================================
+task.spawn(function()
+    -- Заполнение полосы загрузки
+    TweenService:Create(BarFill, TweenInfo.new(1.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 1, 0)}):Play()
+    task.wait(1.2)
+    
+    -- Исчезновение заставки
+    TweenService:Create(SplashFrame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 0, 0, 0),
+        Position = UDim2.new(0.5, 0, 0.5, 0)
+    }):Play()
+    task.wait(0.25)
+    SplashFrame:Destroy()
 
+    -- Плавное появление компактного окна
+    Main.Size = UDim2.new(0, 0, 0, 0)
+    Main.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Main.Visible = true
+    
+    TweenService:Create(Main, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 360, 0, 400),
+        Position = UDim2.new(0.5, -180, 0.5, -200)
+    }):Play()
+end)
+
+-- ==========================================
+--          4. ЛОГИКА ФЛИНГА И СПИСКА
+-- ==========================================
 local function Message(_Title, _Text, Time)
-    game:GetService("StarterGui"):SetCore("SendNotification", {Title = _Title, Text = _Text, Duration = Time})
+    StarterGui:SetCore("SendNotification", {Title = _Title, Text = _Text, Duration = Time})
 end
 
 local function SkidFling(TargetPlayer)
@@ -127,7 +219,7 @@ local function SkidFling(TargetPlayer)
         getgenv().OldPos = RootPart.CFrame
         
         if THumanoid and THumanoid.Sit then
-            return Message("Error Occurred", "Target is sitting", 5)
+            return Message("Ошибка", "Игрок сидит", 4)
         end
         if THead then
             workspace.CurrentCamera.CameraSubject = THead
@@ -136,9 +228,7 @@ local function SkidFling(TargetPlayer)
         else
             workspace.CurrentCamera.CameraSubject = THumanoid
         end
-        if not TCharacter:FindFirstChildWhichIsA("BasePart") then
-            return
-        end
+        if not TCharacter:FindFirstChildWhichIsA("BasePart") then return end
         
         local function FPos(BasePart, Pos, Ang)
             RootPart.CFrame = CFrame.new(BasePart.Position) * Pos * Ang
@@ -211,13 +301,11 @@ local function SkidFling(TargetPlayer)
         
         workspace.FallenPartsDestroyHeight = getgenv().FPDH
     else
-        return Message("Error Occurred", "Random error", 5)
+        return Message("Ошибка", "Персонаж не найден", 4)
     end
 end
 
-
--- === ОБНОВЛЕННАЯ ЛОГИКА СПИСКА ===
-
+-- === ОБНОВЛЕНИЕ СПИСКА ИГРОКОВ (КОМПАКТНЫЕ КАРТОЧКИ) ===
 local function UpdateList()
     for _, child in pairs(Scroll:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
@@ -226,58 +314,58 @@ local function UpdateList()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= Player then
             local Btn = Instance.new("TextButton", Scroll)
-            Btn.Size = UDim2.new(0.95, 0, 0, 55) -- Чуть увеличили высоту для двух строк текста
-            Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-            Btn.Text = "" 
+            Btn.Name = "PlayerCard_" .. p.Name
+            Btn.Size = UDim2.new(0.98, 0, 0, 44) -- Компактная высота 44px
+            Btn.BackgroundColor3 = Theme.Card
+            Btn.Text = ""
             Btn.AutoButtonColor = false
             
             Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
             
-            -- АВАТАРКА
+            local CardStroke = Instance.new("UIStroke", Btn)
+            CardStroke.Color = Theme.Stroke
+            CardStroke.Thickness = 1
+            CardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+            -- Аватарка
             local Avatar = Instance.new("ImageLabel", Btn)
-            Avatar.Size = UDim2.new(0, 42, 0, 42)
-            Avatar.Position = UDim2.new(0, 7, 0.5, -21)
-            Avatar.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            Avatar.Size = UDim2.new(0, 30, 0, 30)
+            Avatar.Position = UDim2.new(0, 7, 0.5, -15)
+            Avatar.BackgroundColor3 = Theme.Background
             Avatar.Image = Players:GetUserThumbnailAsync(p.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
             Instance.new("UICorner", Avatar).CornerRadius = UDim.new(1, 0)
 
-            -- DISPLAY NAME (Жирный, основной)
+            -- Отображаемое имя
             local DisplayLabel = Instance.new("TextLabel", Btn)
-            DisplayLabel.Size = UDim2.new(1, -65, 0, 25)
-            DisplayLabel.Position = UDim2.new(0, 60, 0, 8)
+            DisplayLabel.Size = UDim2.new(1, -50, 0, 16)
+            DisplayLabel.Position = UDim2.new(0, 45, 0, 6)
             DisplayLabel.BackgroundTransparency = 1
             DisplayLabel.Text = p.DisplayName
-            DisplayLabel.TextColor3 = Color3.new(1, 1, 1)
-            DisplayLabel.Font = Enum.Font.SourceSansBold
-            DisplayLabel.TextSize = 18
+            DisplayLabel.TextColor3 = Theme.TextPrimary
+            DisplayLabel.Font = Enum.Font.GothamBold
+            DisplayLabel.TextSize = 12
             DisplayLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-            -- USERNAME (Серый, поменьше, через @)
+            -- Юзернейм (@username)
             local UserLabel = Instance.new("TextLabel", Btn)
-            UserLabel.Size = UDim2.new(1, -65, 0, 20)
-            UserLabel.Position = UDim2.new(0, 60, 0, 28)
+            UserLabel.Size = UDim2.new(1, -50, 0, 14)
+            UserLabel.Position = UDim2.new(0, 45, 0, 22)
             UserLabel.BackgroundTransparency = 1
             UserLabel.Text = "@" .. p.Name
-            UserLabel.TextColor3 = Color3.fromRGB(160, 160, 160) -- Неяркий серый
-            UserLabel.Font = Enum.Font.SourceSans
-            UserLabel.TextSize = 14
+            UserLabel.TextColor3 = Theme.TextSecondary
+            UserLabel.Font = Enum.Font.Gotham
+            UserLabel.TextSize = 10
             UserLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-            -- ОБВОДКА ПРИ НАВЕДЕНИИ
-            local bStroke = Instance.new("UIStroke", Btn)
-            bStroke.Color = Color3.fromRGB(0, 160, 0)
-            bStroke.Thickness = 2
-            bStroke.Transparency = 1
-            bStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
+            -- Плавная анимация при наведении
             Btn.MouseEnter:Connect(function()
-                bStroke.Transparency = 0
-                Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+                TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.CardHover}):Play()
+                TweenService:Create(CardStroke, TweenInfo.new(0.15), {Color = Theme.StrokeHover}):Play()
             end)
 
             Btn.MouseLeave:Connect(function()
-                bStroke.Transparency = 1
-                Btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = Theme.Card}):Play()
+                TweenService:Create(CardStroke, TweenInfo.new(0.15), {Color = Theme.Stroke}):Play()
             end)
 
             Btn.MouseButton1Click:Connect(function()
@@ -285,10 +373,10 @@ local function UpdateList()
             end)
         end
     end
-    Scroll.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 10)
+    Scroll.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 8)
 end
 
--- Авто-обновление при входе/выходе игроков
+-- Авто-обновление
 Players.PlayerAdded:Connect(UpdateList)
 Players.PlayerRemoving:Connect(UpdateList)
-UpdateList() -- Запуск при старте
+UpdateList()
