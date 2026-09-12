@@ -1,45 +1,76 @@
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
+-- Защищенное получение сервисов
+local function getService(name)
+    local service = game:GetService(name)
+    return (cloneref and cloneref(service)) or service
+end
+
+local TweenService = getService("TweenService")
+local Players = getService("Players")
+local UserInputService = getService("UserInputService")
+local Workspace = getService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Поддержка твоих тем (если запущен в хабе) или дефолтная палитра
+-- Генерация случайных имён UI для защиты от античитов
+local function getRandomName(length)
+    local str = ""
+    for _ = 1, length or math.random(8, 14) do
+        str = str .. string.char(math.random(97, 122))
+    end
+    return str
+end
+
+local function tween(instance, info, properties)
+    local anim = TweenService:Create(instance, info, properties)
+    anim:Play()
+    return anim
+end
+
 local Theme = (typeof(CurrentTheme) == "table" and CurrentTheme) or {
-    Dark = Color3.fromRGB(18, 18, 24),
-    Black = Color3.fromRGB(12, 12, 16),
-    Grey = Color3.fromRGB(45, 45, 58),
-    White = Color3.fromRGB(240, 240, 245),
-    Light = Color3.fromRGB(160, 160, 180)
+    Dark = Color3.fromRGB(20, 20, 26),
+    Black = Color3.fromRGB(14, 14, 18),
+    Grey = Color3.fromRGB(50, 50, 65),
+    White = Color3.fromRGB(245, 245, 250),
+    Light = Color3.fromRGB(150, 150, 175)
 }
 
 local isEnabled = false
 local isClickProcessed = false
-
--- Обычная прочная таблица для сохранения объектов в памяти (БЕЗ __mode = "k")
 local deletedObjects = {}
-
--- Проверка доступности таблицы зарегистрированных кнопок
 local regButtons = (typeof(registeredButtons) == "table" and registeredButtons) or {}
 
 -- ============================================================================
--- СОЗДАНИЕ UI В ТВОЕМ СТИЛЕ
+-- СОЗДАНИЕ И ЗАЩИТА UI
 -- ============================================================================
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "Jez_ObjectHider"
+screenGui.Name = getRandomName()
 screenGui.ResetOnSpawn = false
-screenGui.Parent = playerGui
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local targetParent = playerGui
+if gethui then
+    targetParent = gethui()
+elseif syn and syn.protect_gui then
+    syn.protect_gui(screenGui)
+    targetParent = getService("CoreGui")
+end
+screenGui.Parent = targetParent
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 230, 0, 270)
+mainFrame.Name = getRandomName()
+mainFrame.Size = UDim2.new(0, 235, 0, 280)
 mainFrame.Position = UDim2.new(0.8, -10, 0.3, 0)
 mainFrame.BackgroundColor3 = Theme.Dark
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
+mainFrame.ClipsDescendants = true
 mainFrame.Parent = screenGui
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+
+local mainScale = Instance.new("UIScale", mainFrame)
+mainScale.Scale = 0
 
 local mainStroke = Instance.new("UIStroke", mainFrame)
 mainStroke.Color = Theme.Grey
@@ -47,26 +78,162 @@ mainStroke.Thickness = 1.5
 mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 table.insert(regButtons, {Button = mainFrame, Stroke = mainStroke})
 
--- Заголовок
-local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 32)
-title.BackgroundColor3 = Theme.Black
-title.Text = "  🪄 Jez Hider (R + LMB)"
+-- ----------------------------------------------------------------------------
+-- ШАПКА И НАЗВАНИЕ
+-- ----------------------------------------------------------------------------
+local header = Instance.new("Frame", mainFrame)
+header.Size = UDim2.new(1, 0, 0, 36)
+header.BackgroundColor3 = Theme.Black
+header.BorderSizePixel = 0
+header.ZIndex = 2
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 12)
+
+local title = Instance.new("TextLabel", header)
+title.Size = UDim2.new(0, 90, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "👻 Jez Hider"
 title.TextColor3 = Theme.White
-title.TextSize = 12
+title.TextSize = 13
 title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
-Instance.new("UICorner", title).CornerRadius = UDim.new(0, 10)
+title.ZIndex = 3
 
--- Кнопка Режима (СИНЯЯ = ВЫКЛ, КРАСНАЯ = ВКЛ)
+local badge = Instance.new("Frame", header)
+badge.Size = UDim2.new(0, 58, 0, 18)
+badge.Position = UDim2.new(0, 92, 0.5, -9)
+badge.BackgroundColor3 = Theme.Dark
+badge.BorderSizePixel = 0
+badge.ZIndex = 3
+Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 6)
+
+local watermark = Instance.new("TextLabel", badge)
+watermark.Size = UDim2.new(1, 0, 1, 0)
+watermark.BackgroundTransparency = 1
+watermark.Text = "by jezafes"
+watermark.TextColor3 = Theme.Light
+watermark.TextSize = 9
+watermark.Font = Enum.Font.GothamMedium
+watermark.ZIndex = 4
+
+-- Кнопка Инструкции (💡)
+local infoBtn = Instance.new("TextButton", header)
+infoBtn.Size = UDim2.new(0, 24, 0, 24)
+infoBtn.Position = UDim2.new(1, -58, 0.5, -12)
+infoBtn.BackgroundColor3 = Theme.Grey
+infoBtn.BackgroundTransparency = 0.8
+infoBtn.Text = "💡"
+infoBtn.TextSize = 12
+infoBtn.Font = Enum.Font.GothamBold
+infoBtn.ZIndex = 4
+Instance.new("UICorner", infoBtn).CornerRadius = UDim.new(0, 6)
+
+infoBtn.MouseEnter:Connect(function()
+    tween(infoBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0.2})
+end)
+infoBtn.MouseLeave:Connect(function()
+    tween(infoBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0.8})
+end)
+
+-- Кнопка Закрытия (X)
+local closeBtn = Instance.new("TextButton", header)
+closeBtn.Size = UDim2.new(0, 24, 0, 24)
+closeBtn.Position = UDim2.new(1, -29, 0.5, -12)
+closeBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+closeBtn.BackgroundTransparency = 0.85
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Theme.White
+closeBtn.TextSize = 12
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.ZIndex = 4
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
+
+closeBtn.MouseEnter:Connect(function()
+    tween(closeBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0.1, BackgroundColor3 = Color3.fromRGB(240, 40, 40)})
+end)
+closeBtn.MouseLeave:Connect(function()
+    tween(closeBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0.85, BackgroundColor3 = Color3.fromRGB(220, 50, 50)})
+end)
+
+local isClosing = false
+closeBtn.MouseButton1Click:Connect(function()
+    if isClosing then return end
+    isClosing = true
+    local anim = tween(mainScale, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale = 0})
+    anim.Completed:Connect(function()
+        screenGui:Destroy()
+    end)
+end)
+
+-- ----------------------------------------------------------------------------
+-- ОКНО ИНСТРУКЦИИ (КРАСИВЫЕ ОТСТУПЫ И МЕЖСТРОЧНЫЙ ИНТЕРВАЛ)
+-- ----------------------------------------------------------------------------
+local infoFrame = Instance.new("Frame", mainFrame)
+infoFrame.Size = UDim2.new(1, 0, 1, -36)
+infoFrame.Position = UDim2.new(0, 0, 1, 0)
+infoFrame.BackgroundColor3 = Theme.Dark
+infoFrame.BorderSizePixel = 0
+infoFrame.ZIndex = 10
+Instance.new("UICorner", infoFrame).CornerRadius = UDim.new(0, 12)
+
+local infoTitle = Instance.new("TextLabel", infoFrame)
+infoTitle.Size = UDim2.new(0.9, 0, 0, 24)
+infoTitle.Position = UDim2.new(0.05, 0, 0.04, 0)
+infoTitle.BackgroundTransparency = 1
+infoTitle.Text = "💡 Инструкция:"
+infoTitle.TextColor3 = Theme.White
+infoTitle.TextSize = 14
+infoTitle.Font = Enum.Font.GothamBold
+infoTitle.TextXAlignment = Enum.TextXAlignment.Left
+infoTitle.ZIndex = 11
+
+local infoText = Instance.new("TextLabel", infoFrame)
+infoText.Size = UDim2.new(0.9, 0, 0, 165)
+infoText.Position = UDim2.new(0.05, 0, 0.16, 0)
+infoText.BackgroundTransparency = 1
+infoText.TextColor3 = Theme.White
+infoText.TextSize = 11.5
+infoText.LineHeight = 1.25 -- Увеличенный интервал между строчками
+infoText.Font = Enum.Font.Gotham
+infoText.TextWrapped = true
+infoText.TextYAlignment = Enum.TextYAlignment.Top
+infoText.TextXAlignment = Enum.TextXAlignment.Left
+infoText.ZIndex = 11
+infoText.Text = "1. Нажми «Режим: ВКЛ».\n\n2. Зажми [ R ] и кликни ЛКМ по объекту, чтобы скрыть.\n\n3. Нажми [Вернуть] в списке для восстановления.\n\n4. «Восстановить ВСЁ» возвращает абсолютно всё."
+
+local backBtn = Instance.new("TextButton", infoFrame)
+backBtn.Size = UDim2.new(0.9, 0, 0, 28)
+backBtn.Position = UDim2.new(0.05, 0, 0.85, 0)
+backBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 220)
+backBtn.Text = "Понятно"
+backBtn.TextColor3 = Theme.White
+backBtn.TextSize = 11
+backBtn.Font = Enum.Font.GothamBold
+backBtn.ZIndex = 11
+Instance.new("UICorner", backBtn).CornerRadius = UDim.new(0, 8)
+
+local isInfoOpen = false
+local function toggleInfo()
+    isInfoOpen = not isInfoOpen
+    local targetPos = isInfoOpen and UDim2.new(0, 0, 0, 36) or UDim2.new(0, 0, 1, 0)
+    tween(infoFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = targetPos})
+end
+
+infoBtn.MouseButton1Click:Connect(toggleInfo)
+backBtn.MouseButton1Click:Connect(toggleInfo)
+
+-- ----------------------------------------------------------------------------
+-- ОСНОВНЫЕ КНОПКИ И СПИСОК
+-- ----------------------------------------------------------------------------
 local toggleBtn = Instance.new("TextButton", mainFrame)
 toggleBtn.Size = UDim2.new(0.9, 0, 0, 32)
-toggleBtn.Position = UDim2.new(0.05, 0, 0.15, 0)
+toggleBtn.Position = UDim2.new(0.05, 0, 0.17, 0)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 220)
 toggleBtn.Text = "Режим: ВЫКЛ"
 toggleBtn.TextColor3 = Theme.White
 toggleBtn.TextSize = 12
 toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.ZIndex = 2
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
 
 local toggleStroke = Instance.new("UIStroke", toggleBtn)
@@ -74,16 +241,16 @@ toggleStroke.Color = Theme.Grey
 toggleStroke.Thickness = 1
 table.insert(regButtons, {Button = toggleBtn, Stroke = toggleStroke})
 
--- Список скрытых элементов
 local scrollList = Instance.new("ScrollingFrame", mainFrame)
-scrollList.Size = UDim2.new(0.9, 0, 0, 125)
-scrollList.Position = UDim2.new(0.05, 0, 0.29, 0)
+scrollList.Size = UDim2.new(0.9, 0, 0, 120)
+scrollList.Position = UDim2.new(0.05, 0, 0.31, 0)
 scrollList.BackgroundColor3 = Theme.Black
 scrollList.BorderSizePixel = 0
 scrollList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 scrollList.CanvasSize = UDim2.new(0, 0, 0, 0)
-scrollList.ScrollBarThickness = 4
+scrollList.ScrollBarThickness = 3
 scrollList.ScrollBarImageColor3 = Theme.Grey
+scrollList.ZIndex = 2
 Instance.new("UICorner", scrollList).CornerRadius = UDim.new(0, 8)
 
 local listLayout = Instance.new("UIListLayout", scrollList)
@@ -94,7 +261,6 @@ listPadding.PaddingTop = UDim.new(0, 4)
 listPadding.PaddingLeft = UDim.new(0, 4)
 listPadding.PaddingRight = UDim.new(0, 4)
 
--- Кнопка Восстановить ВСЁ
 local restoreAllBtn = Instance.new("TextButton", mainFrame)
 restoreAllBtn.Size = UDim2.new(0.9, 0, 0, 32)
 restoreAllBtn.Position = UDim2.new(0.05, 0, 0.84, 0)
@@ -103,6 +269,7 @@ restoreAllBtn.Text = "Восстановить ВСЁ"
 restoreAllBtn.TextColor3 = Theme.White
 restoreAllBtn.TextSize = 12
 restoreAllBtn.Font = Enum.Font.GothamBold
+restoreAllBtn.ZIndex = 2
 Instance.new("UICorner", restoreAllBtn).CornerRadius = UDim.new(0, 8)
 
 local restoreStroke = Instance.new("UIStroke", restoreAllBtn)
@@ -111,11 +278,11 @@ restoreStroke.Thickness = 1
 table.insert(regButtons, {Button = restoreAllBtn, Stroke = restoreStroke})
 
 -- ============================================================================
--- ПЕРЕТАСКИВАНИЕ ОКНА (DRAGGABLE)
+-- DRAGGABLE
 -- ============================================================================
 local dragging, dragInput, dragStart, startPos
 
-mainFrame.InputBegan:Connect(function(input)
+header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
@@ -129,7 +296,7 @@ mainFrame.InputBegan:Connect(function(input)
     end
 end)
 
-mainFrame.InputChanged:Connect(function(input)
+header.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
         dragInput = input
     end
@@ -148,11 +315,11 @@ end)
 -- ============================================================================
 -- ЛОГИКА СКРЫТИЯ И ВОССТАНОВЛЕНИЯ
 -- ============================================================================
-
 toggleBtn.MouseButton1Click:Connect(function()
     isEnabled = not isEnabled
     toggleBtn.Text = isEnabled and "Режим: ВКЛ" or "Режим: ВЫКЛ"
-    toggleBtn.BackgroundColor3 = isEnabled and Color3.fromRGB(220, 50, 50) or Color3.fromRGB(40, 100, 220)
+    local targetColor = isEnabled and Color3.fromRGB(220, 50, 50) or Color3.fromRGB(40, 100, 220)
+    tween(toggleBtn, TweenInfo.new(0.25), {BackgroundColor3 = targetColor})
 end)
 
 local function isSafeToHide(target)
@@ -172,11 +339,12 @@ local function hideObject(target)
     local itemBtn = Instance.new("TextButton", scrollList)
     itemBtn.Size = UDim2.new(1, 0, 0, 24)
     itemBtn.BackgroundColor3 = Theme.Dark
-    itemBtn.Text = "  [Вернуть] " .. string.sub(target.Name, 1, 16)
+    itemBtn.Text = "  [Вернуть] " .. string.sub(target.Name, 1, 15)
     itemBtn.TextColor3 = Theme.White
     itemBtn.TextSize = 11
     itemBtn.Font = Enum.Font.Gotham
     itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+    itemBtn.ZIndex = 3
     Instance.new("UICorner", itemBtn).CornerRadius = UDim.new(0, 5)
 
     itemBtn.MouseButton1Click:Connect(function()
@@ -203,16 +371,13 @@ restoreAllBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ============================================================================
--- БЫСТРЫЙ И ЛЁГКИЙ ПОИСК ОБЪЕКТА (БЕЗ ЛАГОВ)
--- ============================================================================
 local function getTargetUnderMouse()
     local mousePosition = UserInputService:GetMouseLocation()
     local unitRay = Camera:ViewportPointToRay(mousePosition.X, mousePosition.Y)
 
     local raycastParams = RaycastParams.new()
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    raycastParams.RespectCanCollide = false -- Позволяет задевать любые детали, даже без коллизии
+    raycastParams.RespectCanCollide = false
 
     if LocalPlayer.Character then
         raycastParams.FilterDescendantsInstances = { LocalPlayer.Character }
@@ -226,9 +391,6 @@ local function getTargetUnderMouse()
     return nil
 end
 
--- ============================================================================
--- ОБРАБОТКА НАЖАТИЯ (R + LMB)
--- ============================================================================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
 
@@ -249,3 +411,5 @@ UserInputService.InputEnded:Connect(function(input)
         isClickProcessed = false
     end
 end)
+
+tween(mainScale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
