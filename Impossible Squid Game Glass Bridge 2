@@ -1,0 +1,208 @@
+--[[
+    Glass Bridge Breakable Tile Hider (With Safe Close Button)
+--]]
+
+if getgenv().GlassBridgeHiderCleanup then
+    pcall(getgenv().GlassBridgeHiderCleanup)
+end
+
+local isRunning = true
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BridgeHiderGUI_Clean"
+ScreenGui.ResetOnSpawn = false
+
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+local hiddenParts = {}
+
+-- Функция полной очистки
+local function cleanup()
+    isRunning = false
+    for part, data in pairs(hiddenParts) do
+        if part and part.Parent then
+            part.Transparency = data.transparency
+            part.CanCollide = data.canCollide
+        end
+    end
+    hiddenParts = {}
+    if ScreenGui then ScreenGui:Destroy() end
+    getgenv().GlassBridgeHiderCleanup = nil
+end
+
+getgenv().GlassBridgeHiderCleanup = cleanup
+
+-- Главная невидимая кнопка для кликов и перетаскивания
+local ToggleHiderBtn = Instance.new("TextButton")
+ToggleHiderBtn.Size = UDim2.new(0, 200, 0, 50)
+ToggleHiderBtn.Position = UDim2.new(0, 20, 0, 20)
+ToggleHiderBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+ToggleHiderBtn.BackgroundTransparency = 0.2
+ToggleHiderBtn.Text = ""
+ToggleHiderBtn.Parent = ScreenGui
+
+local BtnCorner = Instance.new("UICorner")
+BtnCorner.CornerRadius = UDim.new(0, 8)
+BtnCorner.Parent = ToggleHiderBtn
+
+local BtnStroke = Instance.new("UIStroke")
+BtnStroke.Color = Color3.fromRGB(70, 70, 85)
+BtnStroke.Thickness = 1.5
+BtnStroke.Parent = ToggleHiderBtn
+
+-- Мини-крестик для закрытия (в правом верхнем углу)
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -28, 0, 4)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 13
+CloseBtn.TextColor3 = Color3.fromRGB(150, 150, 165)
+CloseBtn.Text = "×"
+CloseBtn.Parent = ToggleHiderBtn
+
+CloseBtn.MouseButton1Click:Connect(function()
+    cleanup()
+end)
+
+-- Слой 1: Основной статус (Фейки: ВКЛ/ВЫКЛ)
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -30, 0, 24)
+StatusLabel.Position = UDim2.new(0, 8, 0, 6)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 13
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+StatusLabel.Text = "👁️ ФЕЙКИ: ВЫКЛ"
+StatusLabel.Parent = ToggleHiderBtn
+
+-- Слой 2: Подпись by Jezafes
+local SignatureLabel = Instance.new("TextLabel")
+SignatureLabel.Size = UDim2.new(1, -30, 0, 16)
+SignatureLabel.Position = UDim2.new(0, 8, 0, 28)
+SignatureLabel.BackgroundTransparency = 1
+SignatureLabel.Font = Enum.Font.Gotham
+SignatureLabel.TextSize = 10
+SignatureLabel.TextXAlignment = Enum.TextXAlignment.Left
+SignatureLabel.TextColor3 = Color3.fromRGB(142, 154, 175)
+SignatureLabel.Text = "by Jezafes"
+SignatureLabel.Parent = ToggleHiderBtn
+
+-- Плавное появление при старте
+ToggleHiderBtn.Size = UDim2.new(0, 0, 0, 0)
+TweenService:Create(ToggleHiderBtn, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+    Size = UDim2.new(0, 200, 0, 50)
+}):Play()
+
+-- Перетаскивание (чтобы нажатие на крестик не запускало перетаскивание, вешаем на кнопку, но исключаем крестик)
+local dragging, dragInput, dragStart, startPos
+ToggleHiderBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        -- Проверяем, что клик не по крестику
+        local mousePos = UserInputService:GetMouseLocation()
+        local absPos = CloseBtn.AbsolutePosition
+        local absSize = CloseBtn.AbsoluteSize
+        if mousePos.X >= absPos.X and mousePos.X <= absPos.X + absSize.X and
+           mousePos.Y >= absPos.Y and mousePos.Y <= absPos.Y + absSize.Y then
+            return
+        end
+
+        dragging = true
+        dragStart = input.Position
+        startPos = ToggleHiderBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+ToggleHiderBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        ToggleHiderBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Проверка плиты
+local function isBreakableTile(part)
+    local parent = part.Parent
+    if parent then
+        if parent:FindFirstChild("breakable") then return true end
+        if parent:FindFirstChild("Correct") then return false end
+    end
+    if part:FindFirstChild("breakable") then return true end
+    if part:FindFirstChild("Correct") then return false end
+    return false
+end
+
+local hiderEnabled = false
+
+local function updateHider()
+    if not hiderEnabled or not isRunning then return end
+    
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            local parent = obj.Parent
+            if (parent and parent:FindFirstChild("breakable")) or obj:FindFirstChild("breakable") then
+                if not hiddenParts[obj] then
+                    hiddenParts[obj] = {
+                        transparency = obj.Transparency,
+                        canCollide = obj.CanCollide
+                    }
+                    obj.CanCollide = false
+                    TweenService:Create(obj, TweenInfo.new(0.3), {Transparency = 0.92}):Play()
+                end
+            end
+        end
+    end
+end
+
+ToggleHiderBtn.MouseButton1Click:Connect(function()
+    hiderEnabled = not hiderEnabled
+    
+    if hiderEnabled then
+        TweenService:Create(ToggleHiderBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(20, 38, 26)}):Play()
+        TweenService:Create(BtnStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(70, 160, 95)}):Play()
+        StatusLabel.TextColor3 = Color3.fromRGB(230, 255, 235)
+        StatusLabel.Text = "👁️ ФЕЙКИ: ВКЛ"
+        updateHider()
+    else
+        TweenService:Create(ToggleHiderBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(22, 22, 26)}):Play()
+        TweenService:Create(BtnStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(70, 70, 85)}):Play()
+        StatusLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+        StatusLabel.Text = "👁️ ФЕЙКИ: ВЫКЛ"
+        
+        for part, data in pairs(hiddenParts) do
+            if part and part.Parent then
+                part.CanCollide = data.canCollide
+                TweenService:Create(part, TweenInfo.new(0.3), {Transparency = data.transparency}):Play()
+            end
+        end
+        hiddenParts = {}
+    end
+end)
+
+-- Автообновление (каждые 0.3 секунды)
+task.spawn(function()
+    while isRunning do
+        task.wait(0.3)
+        if hiderEnabled then
+            updateHider()
+        end
+    end
+end)
