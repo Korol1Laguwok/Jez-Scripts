@@ -1,0 +1,363 @@
+-- [[ Spectate Camera GUI v2 (with Action State) by Jezafes ]] --
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ЗАЩИТА ОТ ДЮПА: Удаление старой версии
+if CoreGui:FindFirstChild("JezSpectateGui") then
+    CoreGui.JezSpectateGui:Destroy()
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "JezSpectateGui"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- Цветовая палитра
+local Theme = {
+    Background = Color3.fromRGB(20, 20, 24),
+    TopBar = Color3.fromRGB(30, 30, 36),
+    Card = Color3.fromRGB(30, 30, 38),
+    Stroke = Color3.fromRGB(50, 50, 65),
+    TextPrimary = Color3.fromRGB(255, 255, 255),
+    TextSecondary = Color3.fromRGB(150, 150, 160),
+    AccentText = Color3.fromRGB(180, 220, 255),
+    CloseBtn = Color3.fromRGB(180, 45, 45)
+}
+
+-- Главный мини-фрейм (слегка увеличен под статус)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 220, 0, 225)
+MainFrame.Position = UDim2.new(0, -240, 0.5, -112)
+MainFrame.BackgroundColor3 = Theme.Background
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Theme.Stroke
+MainStroke.Thickness = 1.2
+MainStroke.Parent = MainFrame
+
+-- Шапка окна
+local TopBar = Instance.new("Frame")
+TopBar.Name = "TopBar"
+TopBar.Size = UDim2.new(1, 0, 0, 32)
+TopBar.BackgroundColor3 = Theme.TopBar
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainFrame
+
+local TopCorner = Instance.new("UICorner")
+TopCorner.CornerRadius = UDim.new(0, 10)
+TopCorner.Parent = TopBar
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -35, 1, 0)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 12
+TitleLabel.TextColor3 = Theme.TextPrimary
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Text = "👁️ Spectate Camera"
+TitleLabel.Parent = TopBar
+
+-- Крестик закрытия
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Size = UDim2.new(0, 22, 0, 22)
+CloseBtn.Position = UDim2.new(1, -27, 0.5, -11)
+CloseBtn.BackgroundColor3 = Theme.CloseBtn
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 11
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Text = "X"
+CloseBtn.Parent = TopBar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+-- Иконка аватарки
+local Avatar = Instance.new("ImageLabel")
+Avatar.Name = "Avatar"
+Avatar.Size = UDim2.new(0, 44, 0, 44)
+Avatar.Position = UDim2.new(0.5, -22, 0, 38)
+Avatar.BackgroundColor3 = Theme.Card
+Avatar.Image = "rbxassetid://0"
+Avatar.Parent = MainFrame
+
+local AvatarCorner = Instance.new("UICorner")
+AvatarCorner.CornerRadius = UDim.new(1, 0)
+AvatarCorner.Parent = Avatar
+
+local AvatarStroke = Instance.new("UIStroke")
+AvatarStroke.Color = Theme.Stroke
+AvatarStroke.Thickness = 1
+AvatarStroke.Parent = Avatar
+
+-- Имя игрока
+local DisplayNameLabel = Instance.new("TextLabel")
+DisplayNameLabel.Name = "DisplayNameLabel"
+DisplayNameLabel.Size = UDim2.new(1, -20, 0, 16)
+DisplayNameLabel.Position = UDim2.new(0, 10, 0, 86)
+DisplayNameLabel.BackgroundTransparency = 1
+DisplayNameLabel.Font = Enum.Font.GothamBold
+DisplayNameLabel.TextSize = 12
+DisplayNameLabel.TextColor3 = Theme.TextPrimary
+DisplayNameLabel.Text = "Ваш персонаж"
+DisplayNameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+DisplayNameLabel.Parent = MainFrame
+
+local UsernameLabel = Instance.new("TextLabel")
+UsernameLabel.Name = "UsernameLabel"
+UsernameLabel.Size = UDim2.new(1, -20, 0, 14)
+UsernameLabel.Position = UDim2.new(0, 10, 0, 102)
+UsernameLabel.BackgroundTransparency = 1
+UsernameLabel.Font = Enum.Font.Gotham
+UsernameLabel.TextSize = 10
+UsernameLabel.TextColor3 = Theme.TextSecondary
+UsernameLabel.Text = "@You"
+UsernameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+UsernameLabel.Parent = MainFrame
+
+-- МИНИ-ОПИСАНИЕ (Статус: что делает персонаж)
+local ActionLabel = Instance.new("TextLabel")
+ActionLabel.Name = "ActionLabel"
+ActionLabel.Size = UDim2.new(1, -20, 0, 16)
+ActionLabel.Position = UDim2.new(0, 10, 0, 118)
+ActionLabel.BackgroundTransparency = 1
+ActionLabel.Font = Enum.Font.GothamMedium
+ActionLabel.TextSize = 11
+ActionLabel.TextColor3 = Theme.AccentText
+ActionLabel.Text = "Статус: Стоит 🧍"
+ActionLabel.TextTruncate = Enum.TextTruncate.AtEnd
+ActionLabel.Parent = MainFrame
+
+-- Панель кнопок переключения
+local ControlsFrame = Instance.new("Frame")
+ControlsFrame.Name = "ControlsFrame"
+ControlsFrame.Size = UDim2.new(1, -20, 0, 30)
+ControlsFrame.Position = UDim2.new(0, 10, 0, 142)
+ControlsFrame.BackgroundTransparency = 1
+ControlsFrame.Parent = MainFrame
+
+local PrevBtn = Instance.new("TextButton")
+PrevBtn.Name = "PrevBtn"
+PrevBtn.Size = UDim2.new(0, 40, 1, 0)
+PrevBtn.Position = UDim2.new(0, 0, 0, 0)
+PrevBtn.BackgroundColor3 = Theme.Card
+PrevBtn.Font = Enum.Font.GothamBold
+PrevBtn.TextSize = 13
+PrevBtn.TextColor3 = Theme.TextPrimary
+PrevBtn.Text = "◄"
+PrevBtn.Parent = ControlsFrame
+
+local PrevCorner = Instance.new("UICorner")
+PrevCorner.CornerRadius = UDim.new(0, 6)
+PrevCorner.Parent = PrevBtn
+
+local ResetBtn = Instance.new("TextButton")
+ResetBtn.Name = "ResetBtn"
+ResetBtn.Size = UDim2.new(1, -90, 1, 0)
+ResetBtn.Position = UDim2.new(0, 45, 0, 0)
+ResetBtn.BackgroundColor3 = Theme.Card
+ResetBtn.Font = Enum.Font.GothamMedium
+ResetBtn.TextSize = 11
+ResetBtn.TextColor3 = Theme.TextPrimary
+ResetBtn.Text = "Сброс"
+ResetBtn.Parent = ControlsFrame
+
+local ResetCorner = Instance.new("UICorner")
+ResetCorner.CornerRadius = UDim.new(0, 6)
+ResetCorner.Parent = ResetBtn
+
+local NextBtn = Instance.new("TextButton")
+NextBtn.Name = "NextBtn"
+NextBtn.Size = UDim2.new(0, 40, 1, 0)
+NextBtn.Position = UDim2.new(1, -40, 0, 0)
+NextBtn.BackgroundColor3 = Theme.Card
+NextBtn.Font = Enum.Font.GothamBold
+NextBtn.TextSize = 13
+NextBtn.TextColor3 = Theme.TextPrimary
+NextBtn.Text = "►"
+NextBtn.Parent = ControlsFrame
+
+local NextCorner = Instance.new("UICorner")
+NextCorner.CornerRadius = UDim.new(0, 6)
+NextCorner.Parent = NextBtn
+
+-- Подпись автора
+local AuthorTag = Instance.new("TextLabel")
+AuthorTag.Size = UDim2.new(1, -20, 0, 14)
+AuthorTag.Position = UDim2.new(0, 10, 1, -18)
+AuthorTag.BackgroundTransparency = 1
+AuthorTag.Font = Enum.Font.Gotham
+AuthorTag.TextSize = 10
+AuthorTag.TextColor3 = Color3.fromRGB(100, 100, 110)
+AuthorTag.TextXAlignment = Enum.TextXAlignment.Right
+AuthorTag.Text = "by Jezafes"
+AuthorTag.Parent = MainFrame
+
+-- Функция определения текущего действия игрока
+local function getPlayerAction(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then 
+        return "Нет персонажа ⏳" 
+    end
+    
+    local char = targetPlayer.Character
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then 
+        return "Загрузка... ⏳" 
+    end
+
+    if hum.Health <= 0 then
+        return "Умер 💀"
+    elseif hum.Sit then
+        return "Сидит 🪑"
+    end
+
+    local state = hum:GetState()
+    if state == Enum.HumanoidStateType.Jumping then
+        return "Прыгает 🥾"
+    elseif state == Enum.HumanoidStateType.Freefall then
+        return "Падает 🪂"
+    elseif state == Enum.HumanoidStateType.Swimming then
+        return "Плывет 🏊"
+    elseif state == Enum.HumanoidStateType.Climbing then
+        return "Карабкается 🪜"
+    end
+
+    if hum.MoveDirection.Magnitude > 0.1 then
+        if hum.WalkSpeed > 20 then
+            return "Бежит 🏃"
+        else
+            return "Ходит 🚶"
+        end
+    else
+        return "Стоит 🧍"
+    end
+end
+
+-- Переменные слежения
+local currentIndex = 0
+local isSpectating = false
+
+local function getOtherPlayers()
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(list, p)
+        end
+    end
+    return list
+end
+
+local function unspectate()
+    isSpectating = false
+    currentIndex = 0
+    if LocalPlayer.Character then
+        local myHum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if myHum then
+            Camera.CameraSubject = myHum
+        end
+    end
+    DisplayNameLabel.Text = LocalPlayer.DisplayName
+    UsernameLabel.Text = "@" .. LocalPlayer.Name
+    pcall(function()
+        Avatar.Image = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+    end)
+end
+
+local function spectatePlayer(p)
+    if not p then
+        unspectate()
+        return
+    end
+    
+    isSpectating = true
+    DisplayNameLabel.Text = p.DisplayName
+    UsernameLabel.Text = "@" .. p.Name
+    
+    pcall(function()
+        Avatar.Image = Players:GetUserThumbnailAsync(p.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+    end)
+
+    if p.Character then
+        local hum = p.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            Camera.CameraSubject = hum
+        end
+    end
+end
+
+local function changeSpectate(dir)
+    local others = getOtherPlayers()
+    if #others == 0 then
+        unspectate()
+        return
+    end
+
+    currentIndex = currentIndex + dir
+    if currentIndex > #others then
+        currentIndex = 1
+    elseif currentIndex < 1 then
+        currentIndex = #others
+    end
+
+    spectatePlayer(others[currentIndex])
+end
+
+PrevBtn.MouseButton1Click:Connect(function() changeSpectate(-1) end)
+NextBtn.MouseButton1Click:Connect(function() changeSpectate(1) end)
+ResetBtn.MouseButton1Click:Connect(unspectate)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    unspectate()
+    local tweenOut = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Position = UDim2.new(0, -240, 0.5, -112)
+    })
+    tweenOut:Play()
+    tweenOut.Completed:Connect(function()
+        ScreenGui:Destroy()
+    end)
+end)
+
+-- Непрерывный процесс (обновление камеры и статуса действия в реальном времени)
+RunService.RenderStepped:Connect(function()
+    local activePlayer = LocalPlayer
+    
+    if isSpectating then
+        local others = getOtherPlayers()
+        if others[currentIndex] then
+            activePlayer = others[currentIndex]
+            if activePlayer.Character then
+                local hum = activePlayer.Character:FindFirstChildOfClass("Humanoid")
+                if hum and Camera.CameraSubject ~= hum then
+                    Camera.CameraSubject = hum
+                end
+            end
+        end
+    end
+
+    -- Динамическое обновление действия
+    ActionLabel.Text = "Статус: " .. getPlayerAction(activePlayer)
+end)
+
+-- Начальный вид
+unspectate()
+
+-- Выезд окна слева при загрузке
+TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+    Position = UDim2.new(0, 12, 0.5, -112)
+}):Play()
