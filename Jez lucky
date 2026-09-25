@@ -1,366 +1,700 @@
--- ============================================
---           J-LUCKY BLOCK SCRIPT
---              by Jezafes
--- ============================================
+-- =======================================================
+--       ⚡ J-LUCKY BLOCK BATTLEGROUNDS (GUI v4.0)        
+--                     by Jezafes
+-- =======================================================
 
-local HttpService = game:GetService("HttpService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
-local CoreGui = game:GetService("CoreGui")
-local TweenService = game:GetService("TweenService")
+local UI_NAME = "JezLuckyBlockBattlegrounds_GUI_v4"
+
+-- =======================================================
+--            ЗАЩИТА ОТ МНОЖЕСТВЕННОГО ЗАПУСКА
+-- =======================================================
+if getgenv().JezSystemUnload then
+    getgenv().JezSystemUnload()
+end
+
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContextActionService = game:GetService("ContextActionService")
+local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Генерация случайного ID
-local function GenerateID()
-    return HttpService:GenerateGUID(false)
-end
-
--- Цветовая палитра (Monochrome Dark)
-local Theme = {
-    Background    = Color3.fromRGB(15, 15, 17),
-    Container     = Color3.fromRGB(25, 25, 28),
-    Input         = Color3.fromRGB(35, 35, 40),
-    Text          = Color3.fromRGB(240, 240, 240),
-    TextMuted     = Color3.fromRGB(140, 140, 145),
-    AccentWhite   = Color3.fromRGB(255, 255, 255),
-    ButtonPrimary = Color3.fromRGB(230, 230, 230),
-    ButtonText    = Color3.fromRGB(15, 15, 15),
-    Stroke        = Color3.fromRGB(55, 55, 60),
-    Stop          = Color3.fromRGB(180, 40, 40)
-}
-
--- Список событий спавна
-local BlockEvents = {
-    "SpawnLuckyBlock",
-    "SpawnSuperBlock",
-    "SpawnDiamondBlock",
-    "SpawnGalaxyBlock",
-    "SpawnRainbowBlock",
-    "SpawnVoidBlock",
-}
-
--- Поиск родителя для GUI
+-- Очистка старых копий GUI
 local TargetParent = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
-
--- Удаление прошлых копий
-if TargetParent:FindFirstChild("JLuckyBlockGui") then
-    TargetParent.JLuckyBlockGui:Destroy()
+if TargetParent:FindFirstChild(UI_NAME) then
+    TargetParent[UI_NAME]:Destroy()
 end
 
--- Основной ScreenGui
+-- GUI Контейнер
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "JLuckyBlockGui"
+ScreenGui.Name = UI_NAME
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = TargetParent
 
--- Функция плавных анимаций
-local function CreateTween(object, info, properties)
-    local tween = TweenService:Create(object, info, properties)
-    tween:Play()
-    return tween
-end
-
--- Анимация наведения и нажатия
-local function AddButtonAnimation(button, normalColor, hoverColor)
-    button.MouseEnter:Connect(function()
-        CreateTween(button, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = hoverColor})
-    end)
-    button.MouseLeave:Connect(function()
-        CreateTween(button, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundColor3 = normalColor})
-    end)
-    button.MouseButton1Down:Connect(function()
-        CreateTween(button, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {Size = UDim2.new(button.Size.X.Scale, button.Size.X.Offset - 2, button.Size.Y.Scale, button.Size.Y.Offset - 2)})
-    end)
-    button.MouseButton1Up:Connect(function()
-        CreateTween(button, TweenInfo.new(0.08, Enum.EasingStyle.Quad), {Size = UDim2.new(button.Size.X.Scale, button.Size.X.Offset + 2, button.Size.Y.Scale, button.Size.Y.Offset + 2)})
-    end)
-end
-
--- Уведомления
-local function ShowNotification(title, text)
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = 3,
-        })
-    end)
-end
-
--- ============================================
---       ЭКРАН ЗАГРУЗКИ (СПРАВА)
--- ============================================
-
-local LoadingFrame = Instance.new("Frame", ScreenGui)
-LoadingFrame.Name = GenerateID()
-LoadingFrame.Size = UDim2.new(0, 230, 0, 120)
-LoadingFrame.AnchorPoint = Vector2.new(1, 0.5)
-LoadingFrame.Position = UDim2.new(1, -20, 0.5, 0)
-LoadingFrame.BackgroundColor3 = Theme.Background
-LoadingFrame.ClipsDescendants = true
-Instance.new("UICorner", LoadingFrame).CornerRadius = UDim.new(0, 10)
-
-local LoadingStroke = Instance.new("UIStroke", LoadingFrame)
-LoadingStroke.Color = Theme.Stroke
-LoadingStroke.Thickness = 1
-
-local LoadTitle = Instance.new("TextLabel", LoadingFrame)
-LoadTitle.Size = UDim2.new(1, 0, 0, 30)
-LoadTitle.Position = UDim2.new(0, 0, 0, 15)
-LoadTitle.Text = "J-LUCKY BLOCK"
-LoadTitle.TextColor3 = Theme.AccentWhite
-LoadTitle.BackgroundTransparency = 1
-LoadTitle.Font = Enum.Font.GothamBold
-LoadTitle.TextSize = 16
-
-local LoadStatus = Instance.new("TextLabel", LoadingFrame)
-LoadStatus.Size = UDim2.new(1, 0, 0, 20)
-LoadStatus.Position = UDim2.new(0, 0, 0, 45)
-LoadStatus.Text = "Загрузка..."
-LoadStatus.TextColor3 = Theme.TextMuted
-LoadStatus.BackgroundTransparency = 1
-LoadStatus.Font = Enum.Font.Gotham
-LoadStatus.TextSize = 12
-
-local ProgressBarBG = Instance.new("Frame", LoadingFrame)
-ProgressBarBG.Size = UDim2.new(0, 170, 0, 5)
-ProgressBarBG.Position = UDim2.new(0.5, -85, 0, 80)
-ProgressBarBG.BackgroundColor3 = Theme.Container
-Instance.new("UICorner", ProgressBarBG).CornerRadius = UDim.new(1, 0)
-
-local ProgressBar = Instance.new("Frame", ProgressBarBG)
-ProgressBar.Size = UDim2.new(0, 0, 1, 0)
-ProgressBar.BackgroundColor3 = Theme.AccentWhite
-Instance.new("UICorner", ProgressBar).CornerRadius = UDim.new(1, 0)
-
--- ============================================
---       ОСНОВНОЕ МЕНЮ (СПРАВА)
--- ============================================
-
+-- Главное Окно
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Name = GenerateID()
-MainFrame.Size = UDim2.new(0, 230, 0, 255)
-MainFrame.AnchorPoint = Vector2.new(1, 0.5)
-MainFrame.Position = UDim2.new(1, -20, 0.5, 0)
-MainFrame.BackgroundColor3 = Theme.Background
-MainFrame.Active = true
-MainFrame.Draggable = true
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 340, 0, 520)
+MainFrame.Position = UDim2.new(0.5, -170, 0.5, -260)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
 MainFrame.Visible = false
-MainFrame.BackgroundTransparency = 1
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
 
 local MainStroke = Instance.new("UIStroke", MainFrame)
-MainStroke.Color = Theme.Stroke
-MainStroke.Thickness = 1
+MainStroke.Thickness = 1.5
+MainStroke.Color = Color3.fromRGB(60, 60, 80)
 
--- Кнопка закрытия
-local CloseBtn = Instance.new("TextButton", MainFrame)
-CloseBtn.Size = UDim2.new(0, 22, 0, 22)
-CloseBtn.Position = UDim2.new(1, -28, 0, 8)
-CloseBtn.BackgroundColor3 = Theme.Container
-CloseBtn.Text = "×"
-CloseBtn.TextColor3 = Theme.Text
-CloseBtn.TextSize = 16
-CloseBtn.Font = Enum.Font.GothamBold
-Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
-AddButtonAnimation(CloseBtn, Theme.Container, Color3.fromRGB(60, 20, 20))
+local MainScale = Instance.new("UIScale", MainFrame)
+MainScale.Scale = 0
 
--- Заголовок
-local Title = Instance.new("TextLabel", MainFrame)
-Title.Size = UDim2.new(1, -40, 0, 36)
-Title.Position = UDim2.new(0, 12, 0, 0)
-Title.Text = "J-LUCKY BLOCK"
-Title.TextColor3 = Theme.AccentWhite
+-- Функция перетаскивания окна
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    RunService.RenderStepped:Connect(function()
+        if dragging and dragInput then
+            local delta = dragInput.Position - dragStart
+            local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            TweenService:Create(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine), {Position = newPos}):Play()
+        end
+    end)
+end
+makeDraggable(MainFrame)
+
+-- Шапка окна
+local Header = Instance.new("Frame", MainFrame)
+Header.Size = UDim2.new(1, 0, 0, 44)
+Header.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
+Header.BorderSizePixel = 0
+Header.ZIndex = 5
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 14)
+
+local HeaderStroke = Instance.new("UIStroke", Header)
+HeaderStroke.Thickness = 1
+HeaderStroke.Color = Color3.fromRGB(45, 45, 65)
+
+local Title = Instance.new("TextLabel", Header)
+Title.Size = UDim2.new(1, -50, 1, 0)
+Title.Position = UDim2.new(0, 14, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 15
+Title.Text = "⚡ J-LUCKY BLOCK BATTLEGROUNDS"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 11
+Title.TextColor3 = Color3.fromRGB(245, 245, 255)
 Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 10
 
--- Блок с инструкцией
-local InfoBox = Instance.new("Frame", MainFrame)
-InfoBox.Size = UDim2.new(0, 206, 0, 52)
-InfoBox.Position = UDim2.new(0.5, -103, 0, 38)
-InfoBox.BackgroundColor3 = Theme.Container
-Instance.new("UICorner", InfoBox).CornerRadius = UDim.new(0, 6)
+local CloseBtn = Instance.new("TextButton", Header)
+CloseBtn.Size = UDim2.new(0, 26, 0, 26)
+CloseBtn.Position = UDim2.new(1, -34, 0.5, -13)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 12
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.BorderSizePixel = 0
+CloseBtn.ZIndex = 10
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(1, 0)
 
+-- Плавающая кнопка возврата GUI
+local OpenBtn = Instance.new("TextButton", ScreenGui)
+OpenBtn.Size = UDim2.new(0, 48, 0, 48)
+OpenBtn.Position = UDim2.new(0.03, 0, 0.45, 0)
+OpenBtn.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
+OpenBtn.Text = "⚡"
+OpenBtn.TextSize = 22
+OpenBtn.Visible = false
+Instance.new("UICorner", OpenBtn).CornerRadius = UDim.new(0, 12)
+
+local OpenStroke = Instance.new("UIStroke", OpenBtn)
+OpenStroke.Thickness = 1.5
+OpenStroke.Color = Color3.fromRGB(108, 92, 231)
+
+local OpenScale = Instance.new("UIScale", OpenBtn)
+OpenScale.Scale = 0
+makeDraggable(OpenBtn)
+
+-- Анимация сворачивания
+local isAnimating = false
+CloseBtn.MouseButton1Click:Connect(function()
+    if isAnimating then return end
+    isAnimating = true
+    TweenService:Create(MainScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
+    task.wait(0.3)
+    MainFrame.Visible = false
+    OpenBtn.Visible = true
+    TweenService:Create(OpenScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+    isAnimating = false
+end)
+
+OpenBtn.MouseButton1Click:Connect(function()
+    if isAnimating then return end
+    isAnimating = true
+    TweenService:Create(OpenScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
+    task.wait(0.25)
+    OpenBtn.Visible = false
+    MainFrame.Visible = true
+    TweenService:Create(MainScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+    isAnimating = false
+end)
+
+-- Контейнер элементов
+local Container = Instance.new("ScrollingFrame", MainFrame)
+Container.Size = UDim2.new(1, -20, 1, -56)
+Container.Position = UDim2.new(0, 10, 0, 50)
+Container.BackgroundTransparency = 1
+Container.BorderSizePixel = 0
+Container.ScrollBarThickness = 3
+Container.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 110)
+Container.CanvasSize = UDim2.new(0, 0, 0, 0)
+Container.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+local Layout = Instance.new("UIListLayout", Container)
+Layout.Padding = UDim.new(0, 8)
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function createSectionTitle(text)
+    local lbl = Instance.new("TextLabel", Container)
+    lbl.Size = UDim2.new(1, -6, 0, 22)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 11
+    lbl.TextColor3 = Color3.fromRGB(150, 150, 180)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    return lbl
+end
+
+local function createButton(text, callback)
+    local btn = Instance.new("TextButton", Container)
+    btn.Size = UDim2.new(1, -6, 0, 35)
+    btn.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+    btn.Text = text
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.TextColor3 = Color3.fromRGB(235, 235, 245)
+    btn.BorderSizePixel = 0
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    
+    local stroke = Instance.new("UIStroke", btn)
+    stroke.Thickness = 1
+    stroke.Color = Color3.fromRGB(50, 50, 70)
+    
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 40, 55)}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(28, 28, 38)}):Play()
+    end)
+    
+    btn.MouseButton1Click:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), {
+            Size = UDim2.new(1, -10, 0, 32)
+        }):Play()
+        if callback then callback(btn) end
+    end)
+    return btn
+end
+
+-- =======================================================
+--     СЕКЦИЯ 1: VISUAL BRING & ИСКЛЮЧЕНИЯ
+-- =======================================================
+createSectionTitle("👤 УПРАВЛЕНИЕ ИГРОКАМИ (VISUAL)")
+
+-- Таблица исключений
+local excludedPlayers = {}
+
+local function countExcluded()
+    local c = 0
+    for _ in pairs(excludedPlayers) do c = c + 1 end
+    return c
+end
+
+-- Ряд Исключений
+local ExclusionRow = Instance.new("Frame", Container)
+ExclusionRow.Size = UDim2.new(1, -6, 0, 36)
+ExclusionRow.BackgroundTransparency = 1
+
+local ExclusionBtn = Instance.new("TextButton", ExclusionRow)
+ExclusionBtn.Size = UDim2.new(1, -105, 1, 0)
+ExclusionBtn.BackgroundColor3 = Color3.fromRGB(35, 30, 45)
+ExclusionBtn.Text = "🚫 Исключения (0)"
+ExclusionBtn.Font = Enum.Font.GothamBold
+ExclusionBtn.TextSize = 11
+ExclusionBtn.TextColor3 = Color3.fromRGB(220, 180, 255)
+ExclusionBtn.BorderSizePixel = 0
+Instance.new("UICorner", ExclusionBtn).CornerRadius = UDim.new(0, 8)
+
+local ExclStroke = Instance.new("UIStroke", ExclusionBtn)
+ExclStroke.Thickness = 1
+ExclStroke.Color = Color3.fromRGB(80, 60, 110)
+
+local ResetExclBtn = Instance.new("TextButton", ExclusionRow)
+ResetExclBtn.Size = UDim2.new(0, 98, 1, 0)
+ResetExclBtn.Position = UDim2.new(1, -98, 0, 0)
+ResetExclBtn.BackgroundColor3 = Color3.fromRGB(45, 25, 30)
+ResetExclBtn.Text = "🔄 Сброс (0)"
+ResetExclBtn.Font = Enum.Font.GothamBold
+ResetExclBtn.TextSize = 11
+ResetExclBtn.TextColor3 = Color3.fromRGB(255, 150, 150)
+ResetExclBtn.BorderSizePixel = 0
+Instance.new("UICorner", ResetExclBtn).CornerRadius = UDim.new(0, 8)
+
+local ResetStroke = Instance.new("UIStroke", ResetExclBtn)
+ResetStroke.Thickness = 1
+ResetStroke.Color = Color3.fromRGB(90, 40, 50)
+
+local function updateExclusionBtnText()
+    local count = countExcluded()
+    ExclusionBtn.Text = "🚫 Исключения (" .. count .. ")"
+    ResetExclBtn.Text = "🔄 Сброс (" .. count .. ")"
+end
+
+ResetExclBtn.MouseButton1Click:Connect(function()
+    table.clear(excludedPlayers)
+    updateExclusionBtnText()
+end)
+
+-- Окно управления Исключениями
+local ExclusionListFrame = Instance.new("Frame", MainFrame)
+ExclusionListFrame.Name = "ExclusionListFrame"
+ExclusionListFrame.Size = UDim2.new(1, 0, 1, 0)
+ExclusionListFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+ExclusionListFrame.BorderSizePixel = 0
+ExclusionListFrame.ZIndex = 20
+ExclusionListFrame.Visible = false
+
+local ExclHeader = Instance.new("Frame", ExclusionListFrame)
+ExclHeader.Size = UDim2.new(1, 0, 0, 44)
+ExclHeader.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
+ExclHeader.BorderSizePixel = 0
+ExclHeader.ZIndex = 21
+
+local ExclTitle = Instance.new("TextLabel", ExclHeader)
+ExclTitle.Size = UDim2.new(1, -50, 1, 0)
+ExclTitle.Position = UDim2.new(0, 14, 0, 0)
+ExclTitle.BackgroundTransparency = 1
+ExclTitle.Text = "КОВО ИСКЛЮЧИТЬ ИЗ ТЕЛЕПОРТА?"
+ExclTitle.Font = Enum.Font.GothamBlack
+ExclTitle.TextSize = 11
+ExclTitle.TextColor3 = Color3.fromRGB(240, 240, 245)
+ExclTitle.TextXAlignment = Enum.TextXAlignment.Left
+ExclTitle.ZIndex = 22
+
+local CloseExclBtn = Instance.new("TextButton", ExclHeader)
+CloseExclBtn.Size = UDim2.new(0, 26, 0, 26)
+CloseExclBtn.Position = UDim2.new(1, -34, 0.5, -13)
+CloseExclBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+CloseExclBtn.Text = "X"
+CloseExclBtn.Font = Enum.Font.GothamBold
+CloseExclBtn.TextSize = 12
+CloseExclBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseExclBtn.BorderSizePixel = 0
+CloseExclBtn.ZIndex = 22
+Instance.new("UICorner", CloseExclBtn).CornerRadius = UDim.new(1, 0)
+
+local ExclScroll = Instance.new("ScrollingFrame", ExclusionListFrame)
+ExclScroll.Size = UDim2.new(1, -20, 1, -54)
+ExclScroll.Position = UDim2.new(0, 10, 0, 48)
+ExclScroll.BackgroundTransparency = 1
+ExclScroll.BorderSizePixel = 0
+ExclScroll.ScrollBarThickness = 4
+ExclScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 110)
+ExclScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+ExclScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ExclScroll.ZIndex = 21
+
+local ExclLayout = Instance.new("UIListLayout", ExclScroll)
+ExclLayout.Padding = UDim.new(0, 6)
+ExclLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function updateExclusionListUI()
+    for _, child in pairs(ExclScroll:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("TextButton") then child:Destroy() end
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local isExcl = excludedPlayers[player.UserId] == true
+            
+            local card = Instance.new("TextButton", ExclScroll)
+            card.Size = UDim2.new(1, -6, 0, 42)
+            card.BackgroundColor3 = isExcl and Color3.fromRGB(50, 25, 30) or Color3.fromRGB(28, 28, 38)
+            card.BorderSizePixel = 0
+            card.Text = ""
+            card.ZIndex = 22
+            Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+            
+            local cardStroke = Instance.new("UIStroke", card)
+            cardStroke.Thickness = 1
+            cardStroke.Color = isExcl and Color3.fromRGB(120, 40, 50) or Color3.fromRGB(50, 50, 70)
+            
+            local avatarImg = Instance.new("ImageLabel", card)
+            avatarImg.Size = UDim2.new(0, 32, 0, 32)
+            avatarImg.Position = UDim2.new(0, 6, 0.5, -16)
+            avatarImg.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+            avatarImg.BorderSizePixel = 0
+            avatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
+            avatarImg.ZIndex = 23
+            Instance.new("UICorner", avatarImg).CornerRadius = UDim.new(1, 0)
+            
+            local nameLabel = Instance.new("TextLabel", card)
+            nameLabel.Size = UDim2.new(1, -135, 1, 0)
+            nameLabel.Position = UDim2.new(0, 44, 0, 0)
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.Text = player.DisplayName .. "\n(@" .. player.Name .. ")"
+            nameLabel.Font = Enum.Font.GothamBold
+            nameLabel.TextSize = 11
+            nameLabel.TextColor3 = Color3.fromRGB(230, 230, 245)
+            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            nameLabel.ZIndex = 23
+            
+            local statusTag = Instance.new("TextLabel", card)
+            statusTag.Size = UDim2.new(0, 85, 0, 24)
+            statusTag.Position = UDim2.new(1, -90, 0.5, -12)
+            statusTag.BackgroundColor3 = isExcl and Color3.fromRGB(80, 20, 25) or Color3.fromRGB(25, 45, 30)
+            statusTag.Text = isExcl and "🚫 ИСКЛЮЧЕН" or "✅ ВКЛЮЧЕН"
+            statusTag.Font = Enum.Font.GothamBold
+            statusTag.TextSize = 9
+            statusTag.TextColor3 = isExcl and Color3.fromRGB(255, 170, 170) or Color3.fromRGB(170, 255, 190)
+            statusTag.ZIndex = 23
+            Instance.new("UICorner", statusTag).CornerRadius = UDim.new(0, 6)
+            
+            card.MouseButton1Click:Connect(function()
+                if excludedPlayers[player.UserId] then
+                    excludedPlayers[player.UserId] = nil
+                else
+                    excludedPlayers[player.UserId] = true
+                end
+                updateExclusionBtnText()
+                updateExclusionListUI()
+            end)
+        end
+    end
+end
+
+ExclusionBtn.MouseButton1Click:Connect(function()
+    updateExclusionListUI()
+    ExclusionListFrame.Visible = true
+end)
+CloseExclBtn.MouseButton1Click:Connect(function() ExclusionListFrame.Visible = false end)
+
+-- Настройка Дистанции
+local currentDistance = 2.8
+
+local DistanceRow = Instance.new("Frame", Container)
+DistanceRow.Size = UDim2.new(1, -6, 0, 34)
+DistanceRow.BackgroundTransparency = 1
+
+local DistanceLabel = Instance.new("TextLabel", DistanceRow)
+DistanceLabel.Size = UDim2.new(1, -85, 1, 0)
+DistanceLabel.BackgroundTransparency = 1
+DistanceLabel.Text = "📏 Дистанция (0.1 - 100):"
+DistanceLabel.Font = Enum.Font.GothamBold
+DistanceLabel.TextSize = 11
+DistanceLabel.TextColor3 = Color3.fromRGB(200, 200, 220)
+DistanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local DistanceBox = Instance.new("TextBox", DistanceRow)
+DistanceBox.Size = UDim2.new(0, 75, 1, 0)
+DistanceBox.Position = UDim2.new(1, -75, 0, 0)
+DistanceBox.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+DistanceBox.Text = "2.8"
+DistanceBox.PlaceholderText = "0.1-100"
+DistanceBox.Font = Enum.Font.GothamBold
+DistanceBox.TextSize = 12
+DistanceBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+DistanceBox.BorderSizePixel = 0
+DistanceBox.ClearTextOnFocus = false
+Instance.new("UICorner", DistanceBox).CornerRadius = UDim.new(0, 8)
+
+local DistanceStroke = Instance.new("UIStroke", DistanceBox)
+DistanceStroke.Thickness = 1
+DistanceStroke.Color = Color3.fromRGB(45, 45, 65)
+
+DistanceBox.FocusLost:Connect(function()
+    local cleanText = DistanceBox.Text:gsub(",", ".")
+    local num = tonumber(cleanText)
+    if num then
+        currentDistance = math.clamp(num, 0.1, 100)
+    end
+    DistanceBox.Text = tostring(currentDistance)
+end)
+
+-- Переменная Поворота
+local currentFacingIndex = 1
+local facingOptions = {
+    { Text = "🔄 Поворот: Лицом к вам", Angle = math.pi },
+    { Text = "🔄 Поворот: Левым боком к вам", Angle = -math.pi / 2 },
+    { Text = "🔄 Поворот: Правым боком к вам", Angle = math.pi / 2 },
+    { Text = "🔄 Поворот: Спиной к вам", Angle = 0 }
+}
+
+createButton(facingOptions[1].Text, function(btn)
+    currentFacingIndex = (currentFacingIndex % #facingOptions) + 1
+    btn.Text = facingOptions[currentFacingIndex].Text
+end)
+
+-- ЛОГИКА NOCLIP (БЕЗ ОТКИДЫВАНИЯ)
+local isNoclipActive = false
+local noclipConnection = nil
+local noclipBtn
+
+local function toggleNoclip(state)
+    if state == nil then isNoclipActive = not isNoclipActive else isNoclipActive = state end
+    if isNoclipActive then
+        if not noclipConnection then
+            noclipConnection = RunService.Stepped:Connect(function()
+                local char = LocalPlayer.Character
+                if char then
+                    for _, part in ipairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end
+        if noclipBtn then
+            noclipBtn.Text = "👻 Без откидывания (Noclip): ВКЛ"
+            noclipBtn.TextColor3 = Color3.fromRGB(0, 230, 120)
+        end
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+        local char = LocalPlayer.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    part.CanCollide = true
+                end
+            end
+        end
+        if noclipBtn then
+            noclipBtn.Text = "👻 Без откидывания (Noclip): ВЫКЛ"
+            noclipBtn.TextColor3 = Color3.fromRGB(235, 235, 245)
+        end
+    end
+end
+
+noclipBtn = createButton("👻 Без откидывания (Noclip): ВЫКЛ", function()
+    toggleNoclip()
+end)
+
+-- =======================================================
+--    ВЫДЕЛЕННАЯ ГЛАВНАЯ КНОПКА ТЕЛЕПОРТА
+-- =======================================================
+
+local activeLoop = nil
+local currentMode = nil
+
+local function stopLoop()
+    if activeLoop then
+        activeLoop:Disconnect()
+        activeLoop = nil
+    end
+    currentMode = nil
+end
+
+local closeBringBtn = Instance.new("TextButton", Container)
+closeBringBtn.Size = UDim2.new(1, -6, 0, 42)
+closeBringBtn.BackgroundColor3 = Color3.fromRGB(108, 92, 231)
+closeBringBtn.Text = "🔥 ДЕРЖАТЬ ВСЕХ В ОДНОЙ ТОЧКЕ СПЕРЕДИ"
+closeBringBtn.Font = Enum.Font.GothamBlack
+closeBringBtn.TextSize = 11
+closeBringBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBringBtn.BorderSizePixel = 0
+Instance.new("UICorner", closeBringBtn).CornerRadius = UDim.new(0, 10)
+
+local MainBtnStroke = Instance.new("UIStroke", closeBringBtn)
+MainBtnStroke.Thickness = 2
+MainBtnStroke.Color = Color3.fromRGB(160, 145, 255)
+
+closeBringBtn.MouseButton1Click:Connect(function()
+    if currentMode == "close_bring" then
+        stopLoop()
+        closeBringBtn.BackgroundColor3 = Color3.fromRGB(108, 92, 231)
+        closeBringBtn.Text = "🔥 ДЕРЖАТЬ ВСЕХ В ОДНОЙ ТОЧКЕ СПЕРЕДИ"
+        return
+    end
+    stopLoop()
+    currentMode = "close_bring"
+    closeBringBtn.BackgroundColor3 = Color3.fromRGB(0, 184, 148)
+    closeBringBtn.Text = "✅ АКТИВНО: ДЕРЖУ ВСЕХ В ОДНОЙ ТОЧКЕ"
+    
+    activeLoop = RunService.RenderStepped:Connect(function()
+        local myChar = LocalPlayer.Character
+        if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+        local myHRP = myChar.HumanoidRootPart
+        
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and not excludedPlayers[p.UserId] then
+                if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetCFrame = myHRP.CFrame * CFrame.new(0, 0, -currentDistance) * CFrame.Angles(0, facingOptions[currentFacingIndex].Angle, 0)
+                    p.Character.HumanoidRootPart.CFrame = targetCFrame
+                end
+            end
+        end
+    end)
+end)
+
+createButton("🛑 Сбросить визуал", function()
+    stopLoop()
+    closeBringBtn.BackgroundColor3 = Color3.fromRGB(108, 92, 231)
+    closeBringBtn.Text = "🔥 ДЕРЖАТЬ ВСЕХ В ОДНОЙ ТОЧКЕ СПЕРЕДИ"
+end)
+
+-- =======================================================
+--     СЕКЦИЯ 2: LUCKY BLOCK BATTLEGROUNDS
+-- =======================================================
+createSectionTitle("🍀 LUCKY BLOCK BATTLEGROUNDS")
+
+local InfoBox = Instance.new("Frame", Container)
+InfoBox.Size = UDim2.new(1, -6, 0, 48)
+InfoBox.BackgroundColor3 = Color3.fromRGB(24, 24, 34)
+Instance.new("UICorner", InfoBox).CornerRadius = UDim.new(0, 8)
 local InfoStroke = Instance.new("UIStroke", InfoBox)
-InfoStroke.Color = Theme.Stroke
-InfoStroke.Thickness = 1
+InfoStroke.Color = Color3.fromRGB(45, 45, 65)
 
 local InfoText = Instance.new("TextLabel", InfoBox)
 InfoText.Size = UDim2.new(1, -12, 1, -8)
 InfoText.Position = UDim2.new(0, 6, 0, 4)
 InfoText.BackgroundTransparency = 1
-InfoText.Text = "1. Введите нужное кол-во\n2. Нажмите «ЗАПУСТИТЬ»\n3. «ОСТАНОВИТЬ» — прервать"
-InfoText.TextColor3 = Theme.TextMuted
+InfoText.Text = "1. Введите кол-во  2. Нажмите «ЗАПУСТИТЬ»\n3. «ОСТАНОВИТЬ» — прервать спавн блоков"
+InfoText.TextColor3 = Color3.fromRGB(150, 150, 170)
 InfoText.Font = Enum.Font.GothamMedium
 InfoText.TextSize = 10
 InfoText.TextWrapped = true
-InfoText.TextXAlignment = Enum.TextXAlignment.Left
-InfoText.TextYAlignment = Enum.TextYAlignment.Center
 
--- Поле ввода
-local AmountInput = Instance.new("TextBox", MainFrame)
-AmountInput.Size = UDim2.new(0, 206, 0, 32)
-AmountInput.Position = UDim2.new(0.5, -103, 0, 98)
-AmountInput.BackgroundColor3 = Theme.Input
+local AmountInput = Instance.new("TextBox", Container)
+AmountInput.Size = UDim2.new(1, -6, 0, 32)
+AmountInput.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
 AmountInput.Text = "100"
-AmountInput.PlaceholderText = "Количество"
-AmountInput.TextColor3 = Theme.Text
+AmountInput.PlaceholderText = "Количество блоков..."
+AmountInput.TextColor3 = Color3.fromRGB(255, 255, 255)
 AmountInput.Font = Enum.Font.GothamMedium
-AmountInput.TextSize = 14
+AmountInput.TextSize = 12
 Instance.new("UICorner", AmountInput).CornerRadius = UDim.new(0, 6)
-
 local InputStroke = Instance.new("UIStroke", AmountInput)
-InputStroke.Color = Theme.Stroke
-InputStroke.Thickness = 1
+InputStroke.Color = Color3.fromRGB(45, 45, 65)
 
--- Кнопка ЗАПУСТИТЬ
-local StartBtn = Instance.new("TextButton", MainFrame)
-StartBtn.Size = UDim2.new(0, 206, 0, 34)
-StartBtn.Position = UDim2.new(0.5, -103, 0, 138)
-StartBtn.BackgroundColor3 = Theme.ButtonPrimary
-StartBtn.Text = "ЗАПУСТИТЬ"
-StartBtn.TextColor3 = Theme.ButtonText
-StartBtn.Font = Enum.Font.GothamBold
-StartBtn.TextSize = 13
-Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(0, 6)
-AddButtonAnimation(StartBtn, Theme.ButtonPrimary, Color3.fromRGB(200, 200, 200))
-
--- Кнопка СТОП
-local StopBtn = Instance.new("TextButton", MainFrame)
-StopBtn.Size = UDim2.new(0, 206, 0, 30)
-StopBtn.Position = UDim2.new(0.5, -103, 0, 178)
-StopBtn.BackgroundColor3 = Theme.Stop
-StopBtn.Text = "ОСТАНОВИТЬ"
-StopBtn.TextColor3 = Theme.AccentWhite
-StopBtn.Font = Enum.Font.GothamBold
-StopBtn.TextSize = 13
-StopBtn.Visible = false
-Instance.new("UICorner", StopBtn).CornerRadius = UDim.new(0, 6)
-AddButtonAnimation(StopBtn, Theme.Stop, Color3.fromRGB(210, 50, 50))
-
--- Подпись автора внизу
-local AuthorLabel = Instance.new("TextLabel", MainFrame)
-AuthorLabel.Size = UDim2.new(1, 0, 0, 18)
-AuthorLabel.Position = UDim2.new(0, 0, 1, -20)
-AuthorLabel.Text = "by Jezafes"
-AuthorLabel.TextColor3 = Theme.TextMuted
-AuthorLabel.BackgroundTransparency = 1
-AuthorLabel.Font = Enum.Font.GothamMedium
-AuthorLabel.TextSize = 11
-
--- ============================================
---      БЛОКИРОВКА ПЕРЕКЛЮЧЕНИЯ ХОТБАРА
--- ============================================
-
-local HotbarKeys = {
-    Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four, Enum.KeyCode.Five,
-    Enum.KeyCode.Six, Enum.KeyCode.Seven, Enum.KeyCode.Eight, Enum.KeyCode.Nine, Enum.KeyCode.Zero
+local BlockEvents = {
+    "SpawnLuckyBlock", "SpawnSuperBlock", "SpawnDiamondBlock",
+    "SpawnGalaxyBlock", "SpawnRainbowBlock", "SpawnVoidBlock"
 }
 
-AmountInput.Focused:Connect(function()
-    ContextActionService:BindActionAtPriority(
-        "BlockHotbarTyping",
-        function() return Enum.ContextActionResult.Sink end,
-        false,
-        10000,
-        unpack(HotbarKeys)
-    )
-end)
+local isLuckyRunning = false
+local isLuckyStopped = false
 
-AmountInput.FocusLost:Connect(function()
-    ContextActionService:UnbindAction("BlockHotbarTyping")
-end)
-
--- ============================================
---           ЛОГИКА И АНИМАЦИИ
--- ============================================
-
-local isStopped = false
-local isRunning = false
-
--- Симуляция загрузки
-task.spawn(function()
-    CreateTween(ProgressBar, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {Size = UDim2.new(0.4, 0, 1, 0)})
-    task.wait(0.5)
-    LoadStatus.Text = "Подготовка..."
-    
-    CreateTween(ProgressBar, TweenInfo.new(0.6, Enum.EasingStyle.Quad), {Size = UDim2.new(0.8, 0, 1, 0)})
-    task.wait(0.6)
-    LoadStatus.Text = "Готово!"
-    
-    CreateTween(ProgressBar, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 1, 0)})
-    task.wait(0.3)
-    
-    -- Исчезновение экрана загрузки
-    CreateTween(LoadingFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {BackgroundTransparency = 1})
-    CreateTween(LoadTitle, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {TextTransparency = 1})
-    CreateTween(LoadStatus, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {TextTransparency = 1})
-    CreateTween(ProgressBarBG, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 1})
-    CreateTween(ProgressBar, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {BackgroundTransparency = 1})
-    CreateTween(LoadingStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Transparency = 1})
-    
-    task.wait(0.3)
-    LoadingFrame:Destroy()
-    
-    -- Плавное открытие основного окна
-    MainFrame.Visible = true
-    CreateTween(MainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {BackgroundTransparency = 0})
-    
-    ShowNotification("J-LUCKY BLOCK", "Скрипт активирован!")
-end)
-
--- Закрытие GUI
-CloseBtn.MouseButton1Click:Connect(function()
-    ContextActionService:UnbindAction("BlockHotbarTyping")
-    CreateTween(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-        Size = UDim2.new(0, 0, 0, 0),
-        BackgroundTransparency = 1
-    })
-    task.wait(0.25)
-    ScreenGui:Destroy()
-end)
-
--- Спавн блоков
-StartBtn.MouseButton1Click:Connect(function()
-    if isRunning then return end
+local StartBtn = createButton("🚀 ЗАПУСТИТЬ СПАВН БЛОКОВ", function(btn)
+    if isLuckyRunning then return end
     local total = tonumber(AmountInput.Text)
     if not total or total <= 0 then return end
     
-    isRunning = true
-    isStopped = false
-    StopBtn.Visible = true
+    isLuckyRunning = true
+    isLuckyStopped = false
     
     task.spawn(function()
         for i = 1, total do
-            if isStopped then break end
+            if isLuckyStopped then break end
             
             local eventName = BlockEvents[(i - 1) % #BlockEvents + 1]
             local remote = ReplicatedStorage:FindFirstChild(eventName)
-            
             if remote then
                 remote:FireServer()
-                StartBtn.Text = i .. " / " .. total
+                btn.Text = "СПАВН: " .. i .. " / " .. total
             end
-            
             if i % 20 == 0 then
                 task.wait(math.random(5, 10) / 100)
             end
         end
         
-        StartBtn.Text = "ГОТОВО!"
+        btn.Text = "ГОТОВО!"
         task.wait(1.5)
-        StartBtn.Text = "ЗАПУСТИТЬ"
-        StopBtn.Visible = false
-        isRunning = false
+        btn.Text = "🚀 ЗАПУСТИТЬ СПАВН БЛОКОВ"
+        isLuckyRunning = false
     end)
 end)
 
--- Остановка процесса
-StopBtn.MouseButton1Click:Connect(function()
-    isStopped = true
+createButton("⛔ ОСТАНОВИТЬ СПАВН", function()
+    isLuckyStopped = true
 end)
+
+-- =======================================================
+--     СЕКЦИЯ 3: УПРАВЛЕНИЕ СКРИПТОМ И БИНДЫ
+-- =======================================================
+createSectionTitle("⚙️ УПРАВЛЕНИЕ СКРИПТОМ")
+
+local function UnloadGUI()
+    stopLoop()
+    toggleNoclip(false)
+    isLuckyStopped = true
+    isLuckyRunning = false
+    ContextActionService:UnbindAction("BlockHotbarTyping")
+    if ScreenGui and ScreenGui.Parent then
+        ScreenGui:Destroy()
+    end
+    getgenv().JezSystemUnload = nil
+end
+
+getgenv().JezSystemUnload = UnloadGUI
+
+local UnloadBtn = createButton("🗑️ УДАЛИТЬ GUI ПОЛНОСТЬЮ", function()
+    UnloadGUI()
+end)
+UnloadBtn.BackgroundColor3 = Color3.fromRGB(55, 25, 30)
+
+-- Блокировка переключения хотбара клавишами (1-0) при вводе текста
+local HotbarKeys = {
+    Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four, Enum.KeyCode.Five,
+    Enum.KeyCode.Six, Enum.KeyCode.Seven, Enum.KeyCode.Eight, Enum.KeyCode.Nine, Enum.KeyCode.Zero
+}
+
+local function bindHotbarBlock()
+    ContextActionService:BindActionAtPriority(
+        "BlockHotbarTyping",
+        function() return Enum.ContextActionResult.Sink end,
+        false, 10000, unpack(HotbarKeys)
+    )
+end
+
+local function unbindHotbarBlock()
+    ContextActionService:UnbindAction("BlockHotbarTyping")
+end
+
+DistanceBox.Focused:Connect(bindHotbarBlock)
+DistanceBox.FocusLost:Connect(unbindHotbarBlock)
+AmountInput.Focused:Connect(bindHotbarBlock)
+AmountInput.FocusLost:Connect(unbindHotbarBlock)
+
+-- Авторство внизу
+local AuthorLabel = Instance.new("TextLabel", Container)
+AuthorLabel.Size = UDim2.new(1, -6, 0, 20)
+AuthorLabel.Text = "by Jezafes"
+AuthorLabel.TextColor3 = Color3.fromRGB(110, 110, 130)
+AuthorLabel.BackgroundTransparency = 1
+AuthorLabel.Font = Enum.Font.GothamMedium
+AuthorLabel.TextSize = 11
+
+-- Запуск открытия с анимацией
+MainFrame.Visible = true
+TweenService:Create(MainScale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
