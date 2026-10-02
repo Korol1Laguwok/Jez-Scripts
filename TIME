@@ -1,0 +1,829 @@
+-- ============================================================================
+--       JEZ TIME SLIDER v5.4 - SLOW CHIME & RELIABLE AUDIO EDITION
+--                         by Jezafes
+-- ============================================================================
+
+local function getService(name)
+    local service = game:GetService(name)
+    return (cloneref and cloneref(service)) or service
+end
+
+local TweenService = getService("TweenService")
+local Players = getService("Players")
+local UserInputService = getService("UserInputService")
+local RunService = getService("RunService")
+local Lighting = getService("Lighting")
+local Workspace = getService("Workspace")
+local SoundService = getService("SoundService")
+local ContentProvider = getService("ContentProvider")
+
+local LocalPlayer = Players.LocalPlayer
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+local camera = Workspace.CurrentCamera or Workspace:WaitForChild("CurrentCamera")
+
+local function getRandomName(length)
+    local str = ""
+    for _ = 1, length or math.random(8, 14) do
+        str = str .. string.char(math.random(97, 122))
+    end
+    return str
+end
+
+-- Палитра темы Jez
+local Theme = {
+    Background = Color3.fromRGB(15, 15, 22),
+    Card = Color3.fromRGB(22, 22, 32),
+    Border = Color3.fromRGB(50, 55, 75),
+    Accent = Color3.fromRGB(0, 180, 255),
+    Gold = Color3.fromRGB(255, 200, 60),
+    Red = Color3.fromRGB(235, 60, 70),
+    Green = Color3.fromRGB(40, 200, 110),
+    Text = Color3.fromRGB(245, 245, 250),
+    TextMuted = Color3.fromRGB(140, 145, 170)
+}
+
+local isUIVisible = true
+local isLocked = true
+local connections = {}
+
+-- Буфер истории
+local historyBuffer = {}
+local MAX_HISTORY = 15000
+local currentHistoryIndex = 0
+local lastRecordedPos = nil
+local isDraggingSlider = false
+local lastGhostSpawnTime = 0
+
+-- Эффекты освещения
+local blurEffect = Instance.new("BlurEffect")
+blurEffect.Name = getRandomName()
+blurEffect.Size = 0
+blurEffect.Parent = Lighting
+
+local colorCorrection = Instance.new("ColorCorrectionEffect")
+colorCorrection.Name = getRandomName()
+colorCorrection.TintColor = Color3.fromRGB(255, 255, 255)
+colorCorrection.Saturation = 0
+colorCorrection.Parent = Lighting
+
+-- ----------------------------------------------------------------------------
+-- 🔊 НАДЕЖНАЯ НАСТРОЙКА ЗВУКОВ
+-- ----------------------------------------------------------------------------
+local tickSound = Instance.new("Sound")
+tickSound.Name = "ClockTickSound"
+tickSound.SoundId = "rbxasset://sounds/clickfast.wav" -- Гарантированный внутренний звук Roblox
+tickSound.Volume = 2.0
+tickSound.PlaybackSpeed = 0.85
+tickSound.Parent = SoundService
+
+local bellSound = Instance.new("Sound")
+bellSound.Name = "MidnightBellSound"
+bellSound.SoundId = "rbxassetid://9125402313" -- Громкий новогодний звон
+bellSound.Volume = 3.5
+bellSound.Parent = SoundService
+
+task.spawn(function()
+    pcall(function()
+        ContentProvider:PreloadAsync({tickSound, bellSound})
+    end)
+end)
+
+local function playTick()
+    pcall(function()
+        tickSound.TimePosition = 0
+        tickSound:Play()
+    end)
+end
+
+local function playBell()
+    pcall(function()
+        bellSound.TimePosition = 0
+        bellSound:Play()
+    end)
+end
+
+-- ============================================================================
+-- СОЗДАНИЕ И ЗАЩИТА UI
+-- ============================================================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = getRandomName()
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local targetParent = playerGui
+if gethui then
+    targetParent = gethui()
+elseif syn and syn.protect_gui then
+    syn.protect_gui(screenGui)
+    targetParent = getService("CoreGui")
+end
+screenGui.Parent = targetParent
+
+-- ГЛАВНЫЙ КОНТЕЙНЕР (220x280)
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = getRandomName()
+mainFrame.Size = UDim2.new(0, 220, 0, 280)
+mainFrame.AnchorPoint = Vector2.new(1, 1)
+mainFrame.Position = UDim2.new(1, -20, 1, -20)
+mainFrame.BackgroundTransparency = 1
+mainFrame.Active = true
+mainFrame.Visible = false
+mainFrame.Parent = screenGui
+
+-- ----------------------------------------------------------------------------
+-- ЦИФЕРБЛАТ ЧАСОВ UI
+-- ----------------------------------------------------------------------------
+local clockDial = Instance.new("Frame", mainFrame)
+clockDial.Size = UDim2.new(0, 150, 0, 150)
+clockDial.Position = UDim2.new(0.5, -75, 0, 0)
+clockDial.BackgroundColor3 = Theme.Background
+clockDial.BorderSizePixel = 0
+clockDial.ZIndex = 2
+Instance.new("UICorner", clockDial).CornerRadius = UDim.new(1, 0)
+
+local dialStroke = Instance.new("UIStroke", clockDial)
+dialStroke.Color = Theme.Border
+dialStroke.Thickness = 2
+
+-- Цифры 1-12
+local radius = 54
+for i = 1, 12 do
+    local angle = math.rad((i * 30) - 90)
+    local x = math.cos(angle) * radius
+    local y = math.sin(angle) * radius
+
+    local numLabel = Instance.new("TextLabel", clockDial)
+    numLabel.Size = UDim2.new(0, 18, 0, 18)
+    numLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+    numLabel.Position = UDim2.new(0.5, x, 0.5, y)
+    numLabel.BackgroundTransparency = 1
+    numLabel.Text = tostring(i)
+    numLabel.TextColor3 = Theme.Text
+    numLabel.TextSize = 10
+    numLabel.Font = Enum.Font.GothamBold
+    numLabel.ZIndex = 3
+end
+
+-- СТРЕЛКИ UI
+local hourPivot = Instance.new("Frame", clockDial)
+hourPivot.Size = UDim2.new(0, 2, 0, 2)
+hourPivot.AnchorPoint = Vector2.new(0.5, 0.5)
+hourPivot.Position = UDim2.new(0.5, 0, 0.5, 0)
+hourPivot.BackgroundTransparency = 1
+hourPivot.ZIndex = 4
+
+local hourHand = Instance.new("Frame", hourPivot)
+hourHand.Size = UDim2.new(0, 3.5, 0, 32)
+hourHand.AnchorPoint = Vector2.new(0.5, 1)
+hourHand.Position = UDim2.new(0.5, 0, 0.5, 0)
+hourHand.BackgroundColor3 = Theme.Text
+hourHand.BorderSizePixel = 0
+hourHand.ZIndex = 4
+Instance.new("UICorner", hourHand).CornerRadius = UDim.new(1, 0)
+
+local minutePivot = Instance.new("Frame", clockDial)
+minutePivot.Size = UDim2.new(0, 2, 0, 2)
+minutePivot.AnchorPoint = Vector2.new(0.5, 0.5)
+minutePivot.Position = UDim2.new(0.5, 0, 0.5, 0)
+minutePivot.BackgroundTransparency = 1
+minutePivot.ZIndex = 5
+
+local minuteHand = Instance.new("Frame", minutePivot)
+minuteHand.Size = UDim2.new(0, 2.5, 0, 44)
+minuteHand.AnchorPoint = Vector2.new(0.5, 1)
+minuteHand.Position = UDim2.new(0.5, 0, 0.5, 0)
+minuteHand.BackgroundColor3 = Theme.Accent
+minuteHand.BorderSizePixel = 0
+minuteHand.ZIndex = 5
+Instance.new("UICorner", minuteHand).CornerRadius = UDim.new(1, 0)
+
+local secondPivot = Instance.new("Frame", clockDial)
+secondPivot.Size = UDim2.new(0, 2, 0, 2)
+secondPivot.AnchorPoint = Vector2.new(0.5, 0.5)
+secondPivot.Position = UDim2.new(0.5, 0, 0.5, 0)
+secondPivot.BackgroundTransparency = 1
+secondPivot.ZIndex = 6
+
+local secondHand = Instance.new("Frame", secondPivot)
+secondHand.Size = UDim2.new(0, 2, 0, 56)
+secondHand.AnchorPoint = Vector2.new(0.5, 1)
+secondHand.Position = UDim2.new(0.5, 0, 0.5, 0)
+secondHand.BackgroundColor3 = Theme.Red
+secondHand.BorderSizePixel = 0
+secondHand.ZIndex = 6
+Instance.new("UICorner", secondHand).CornerRadius = UDim.new(1, 0)
+
+local centerPin = Instance.new("Frame", clockDial)
+centerPin.Size = UDim2.new(0, 8, 0, 8)
+centerPin.AnchorPoint = Vector2.new(0.5, 0.5)
+centerPin.Position = UDim2.new(0.5, 0, 0.5, 0)
+centerPin.BackgroundColor3 = Theme.Accent
+centerPin.BorderSizePixel = 0
+centerPin.ZIndex = 7
+Instance.new("UICorner", centerPin).CornerRadius = UDim.new(1, 0)
+
+-- Брендинг
+local authorBadge = Instance.new("Frame", clockDial)
+authorBadge.Size = UDim2.new(0, 58, 0, 15)
+authorBadge.AnchorPoint = Vector2.new(0.5, 0)
+authorBadge.Position = UDim2.new(0.5, 0, 0.66, 0)
+authorBadge.BackgroundColor3 = Theme.Card
+authorBadge.BorderSizePixel = 0
+authorBadge.ZIndex = 3
+Instance.new("UICorner", authorBadge).CornerRadius = UDim.new(0, 4)
+
+local authorText = Instance.new("TextLabel", authorBadge)
+authorText.Size = UDim2.new(1, 0, 1, 0)
+authorText.BackgroundTransparency = 1
+authorText.Text = "by Jezafes"
+authorText.TextColor3 = Theme.Accent
+authorText.TextSize = 8
+authorText.Font = Enum.Font.GothamBold
+
+-- ТАБЛО ТАЙМЕРА
+local timeLabel = Instance.new("TextLabel", mainFrame)
+timeLabel.Size = UDim2.new(0.9, 0, 0, 18)
+timeLabel.Position = UDim2.new(0.05, 0, 0.58, 0)
+timeLabel.BackgroundTransparency = 1
+timeLabel.Text = "⏱️ Настоящее (0.0s)"
+timeLabel.TextColor3 = Theme.Green
+timeLabel.TextSize = 10.5
+timeLabel.Font = Enum.Font.GothamBold
+timeLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+-- ПОЛЗУНОК ВРЕМЕНИ
+local sliderCard = Instance.new("Frame", mainFrame)
+sliderCard.Size = UDim2.new(0.9, 0, 0, 26)
+sliderCard.Position = UDim2.new(0.05, 0, 0.66, 0)
+sliderCard.BackgroundColor3 = Theme.Background
+sliderCard.BorderSizePixel = 0
+sliderCard.ZIndex = 5
+Instance.new("UICorner", sliderCard).CornerRadius = UDim.new(0, 6)
+
+local sliderStroke = Instance.new("UIStroke", sliderCard)
+sliderStroke.Color = Theme.Border
+sliderStroke.Thickness = 1
+
+local track = Instance.new("Frame", sliderCard)
+track.Size = UDim2.new(0.85, 0, 0, 4)
+track.Position = UDim2.new(0.075, 0, 0.5, -2)
+track.BackgroundColor3 = Theme.Card
+track.BorderSizePixel = 0
+track.ZIndex = 6
+Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+
+local fill = Instance.new("Frame", track)
+fill.Size = UDim2.new(1, 0, 1, 0)
+fill.BackgroundColor3 = Theme.Accent
+fill.BorderSizePixel = 0
+fill.ZIndex = 7
+Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+local knob = Instance.new("TextButton", track)
+knob.Size = UDim2.new(0, 14, 0, 14)
+knob.AnchorPoint = Vector2.new(0.5, 0.5)
+knob.Position = UDim2.new(1, 0, 0.5, 0)
+knob.BackgroundColor3 = Theme.Text
+knob.Text = ""
+knob.ZIndex = 8
+Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+local knobStroke = Instance.new("UIStroke", knob)
+knobStroke.Color = Theme.Accent
+knobStroke.Thickness = 1.5
+
+-- КНОПКИ УПРАВЛЕНИЯ
+local lockBtn = Instance.new("TextButton", mainFrame)
+lockBtn.Size = UDim2.new(0, 26, 0, 26)
+lockBtn.Position = UDim2.new(0, 0, 1, -26)
+lockBtn.BackgroundColor3 = Theme.Card
+lockBtn.BackgroundTransparency = 0.2
+lockBtn.Text = "🔒"
+lockBtn.TextColor3 = Theme.Text
+lockBtn.TextSize = 12
+lockBtn.Font = Enum.Font.GothamBold
+lockBtn.ZIndex = 10
+Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 8)
+
+local lockStroke = Instance.new("UIStroke", lockBtn)
+lockStroke.Color = Theme.Accent
+lockStroke.Thickness = 1
+
+lockBtn.MouseButton1Click:Connect(function()
+    isLocked = not isLocked
+    lockBtn.Text = isLocked and "🔒" or "🔓"
+    lockStroke.Color = isLocked and Theme.Accent or Theme.Border
+end)
+
+local resetBtn = Instance.new("TextButton", mainFrame)
+resetBtn.Size = UDim2.new(0, 26, 0, 26)
+resetBtn.Position = UDim2.new(0, 32, 1, -26)
+resetBtn.BackgroundColor3 = Theme.Card
+resetBtn.BackgroundTransparency = 0.2
+resetBtn.Text = "🔄"
+resetBtn.TextColor3 = Theme.Text
+resetBtn.TextSize = 12
+resetBtn.Font = Enum.Font.GothamBold
+resetBtn.ZIndex = 10
+Instance.new("UICorner", resetBtn).CornerRadius = UDim.new(0, 8)
+
+local resetStroke = Instance.new("UIStroke", resetBtn)
+resetStroke.Color = Theme.Border
+resetStroke.Thickness = 1
+
+local closeBtn = Instance.new("TextButton", mainFrame)
+closeBtn.Size = UDim2.new(0, 26, 0, 26)
+closeBtn.Position = UDim2.new(1, -26, 1, -26)
+closeBtn.BackgroundColor3 = Theme.Red
+closeBtn.BackgroundTransparency = 0.2
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Theme.Text
+closeBtn.TextSize = 11
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.ZIndex = 10
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 8)
+
+closeBtn.MouseButton1Click:Connect(function()
+    if blurEffect then blurEffect:Destroy() end
+    if colorCorrection then colorCorrection:Destroy() end
+    if tickSound then tickSound:Destroy() end
+    if bellSound then bellSound:Destroy() end
+    for _, conn in ipairs(connections) do
+        if conn then conn:Disconnect() end
+    end
+    screenGui:Destroy()
+end)
+
+-- ----------------------------------------------------------------------------
+-- 🏛 3D МОДЕЛЬ ЧАСОВ БЕЗ ЗЕЛЕНОГО ФОНА (100% TRANSPARENT BASE)
+-- ----------------------------------------------------------------------------
+local function createGiantMidnightClock()
+    local model = Instance.new("Model")
+    model.Name = "GiantMidnightClock"
+
+    local base = Instance.new("Part")
+    base.Name = "ClockBase"
+    base.Size = Vector3.new(14, 14, 0.1)
+    base.Transparency = 1
+    base.CanCollide = false
+    base.Anchored = true
+    base.Parent = model
+    model.PrimaryPart = base
+
+    local surfaceGui = Instance.new("SurfaceGui")
+    surfaceGui.Name = "ClockFaceGui"
+    surfaceGui.Face = Enum.NormalId.Front
+    surfaceGui.CanvasSize = Vector2.new(1024, 1024)
+    surfaceGui.AlwaysOnTop = false
+    surfaceGui.Parent = base
+
+    local outerRing = Instance.new("Frame")
+    outerRing.Size = UDim2.new(1, 0, 1, 0)
+    outerRing.BackgroundColor3 = Theme.Gold
+    outerRing.BorderSizePixel = 0
+    outerRing.Parent = surfaceGui
+    Instance.new("UICorner", outerRing).CornerRadius = UDim.new(1, 0)
+
+    local innerFace = Instance.new("Frame")
+    innerFace.Size = UDim2.new(0.93, 0, 0.93, 0)
+    innerFace.Position = UDim2.new(0.035, 0, 0.035, 0)
+    innerFace.BackgroundColor3 = Color3.fromRGB(12, 14, 22)
+    innerFace.BorderSizePixel = 0
+    innerFace.Parent = outerRing
+    Instance.new("UICorner", innerFace).CornerRadius = UDim.new(1, 0)
+
+    local stroke = Instance.new("UIStroke", innerFace)
+    stroke.Color = Theme.Accent
+    stroke.Thickness = 6
+
+    -- Цифры 1 - 12
+    local dialRadius = 380
+    for i = 1, 12 do
+        local angle = math.rad((i * 30) - 90)
+        local x = math.cos(angle) * dialRadius
+        local y = math.sin(angle) * dialRadius
+
+        local numLabel = Instance.new("TextLabel")
+        numLabel.Size = UDim2.new(0, 110, 0, 110)
+        numLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+        numLabel.Position = UDim2.new(0.5, x, 0.5, y)
+        numLabel.BackgroundTransparency = 1
+        numLabel.Text = tostring(i)
+        numLabel.TextColor3 = Theme.Gold
+        numLabel.TextSize = 72
+        numLabel.Font = Enum.Font.GothamBold
+        numLabel.Parent = innerFace
+    end
+
+    -- 3D-Стрелки
+    local hHand = Instance.new("Part")
+    hHand.Name = "HourHand"
+    hHand.Size = Vector3.new(0.35, 3.6, 0.2)
+    hHand.Material = Enum.Material.SmoothPlastic
+    hHand.Color = Theme.Gold
+    hHand.CanCollide = false
+    hHand.Anchored = true
+    hHand.Parent = model
+
+    local mHand = Instance.new("Part")
+    mHand.Name = "MinuteHand"
+    mHand.Size = Vector3.new(0.25, 4.8, 0.22)
+    mHand.Material = Enum.Material.Neon
+    mHand.Color = Theme.Accent
+    mHand.CanCollide = false
+    mHand.Anchored = true
+    mHand.Parent = model
+
+    local sHand = Instance.new("Part")
+    sHand.Name = "SecondHand"
+    sHand.Size = Vector3.new(0.12, 5.8, 0.25)
+    sHand.Material = Enum.Material.Neon
+    sHand.Color = Theme.Red
+    sHand.CanCollide = false
+    sHand.Anchored = true
+    sHand.Parent = model
+
+    local light = Instance.new("PointLight", base)
+    light.Color = Theme.Accent
+    light.Range = 35
+    light.Brightness = 6
+
+    return model
+end
+
+-- ----------------------------------------------------------------------------
+-- 🎬 МЕДЛЕННАЯ КАТСЦЕНА С ГАРАНТИРОВАННЫМ ЗВУКОМ ТИКАНИЯ И КОЛОКОЛОВ
+-- ----------------------------------------------------------------------------
+local function playMidnightClockCutscene()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+
+    camera.CameraType = Enum.CameraType.Scriptable
+
+    local hrpPos = hrp.Position
+    local hrpLook = hrp.CFrame.LookVector
+    local hrpRight = hrp.CFrame.RightVector
+
+    local clockPos = hrpPos + (hrpLook * 18) + Vector3.new(0, 8, 0)
+    
+    local clockModel = createGiantMidnightClock()
+    clockModel.Parent = Workspace
+    
+    local base = clockModel.PrimaryPart
+    local hHand = clockModel:FindFirstChild("HourHand")
+    local mHand = clockModel:FindFirstChild("MinuteHand")
+    local sHand = clockModel:FindFirstChild("SecondHand")
+
+    -- Поворот ПО ЧАСОВОЙ СТРЕЛКЕ (от -30° слева около 11 часов плавно вверх к 0° на 12)
+    local function updateClockTransforms(secondAngle)
+        if base then
+            base.CFrame = CFrame.lookAt(clockPos, hrpPos + Vector3.new(0, 3, 0))
+        end
+        
+        if base and hHand then
+            hHand.CFrame = base.CFrame * CFrame.new(0, 0, -0.25) * CFrame.Angles(0, 0, 0) * CFrame.new(0, 1.6, 0)
+        end
+        if base and mHand then
+            mHand.CFrame = base.CFrame * CFrame.new(0, 0, -0.30) * CFrame.Angles(0, 0, 0) * CFrame.new(0, 2.2, 0)
+        end
+        if base and sHand then
+            sHand.CFrame = base.CFrame * CFrame.new(0, 0, -0.35) * CFrame.Angles(0, 0, math.rad(secondAngle)) * CFrame.new(0, 2.5, 0)
+        end
+    end
+
+    updateClockTransforms(-30)
+
+    -- Камера: Эпичный ракурс
+    local camPos = hrpPos + (hrpLook * 4) + (hrpRight * -5) + Vector3.new(0, 2, 0)
+    camera.CFrame = CFrame.lookAt(camPos, clockPos)
+    camera.FieldOfView = 60
+
+    blurEffect.Size = 6
+    colorCorrection.TintColor = Color3.fromRGB(180, 220, 255)
+    colorCorrection.Saturation = -0.2
+
+    -- 1. Медленный отсчёт с задержками (по часовой стрелке)
+    local steps = {-30, -24, -18, -12, -6, -2, 0}
+    local delays = {0.8, 0.9, 1.1, 1.3, 1.5, 1.8, 0.3}
+
+    for i, angle in ipairs(steps) do
+        updateClockTransforms(angle)
+        
+        -- Чёткое тиканье стрелки!
+        playTick()
+
+        TweenService:Create(blurEffect, TweenInfo.new(0.25), {Size = 14}):Play()
+        task.wait(delays[i] * 0.35)
+        TweenService:Create(blurEffect, TweenInfo.new(0.35), {Size = 6}):Play()
+        task.wait(delays[i] * 0.65)
+    end
+
+    -- 2. 🎉 ПОЛНОЧЬ! 12:00 - УДАР КУРАНТОВ И ТОРЖЕСТВЕННЫЙ ЗВОН КОЛОКОЛОВ!
+    updateClockTransforms(0)
+
+    playBell()
+
+    TweenService:Create(blurEffect, TweenInfo.new(0.4), {Size = 35}):Play()
+    TweenService:Create(colorCorrection, TweenInfo.new(0.4), {
+        TintColor = Color3.fromRGB(255, 255, 255),
+        Saturation = 1.0
+    }):Play()
+
+    TweenService:Create(camera, TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+        CFrame = CFrame.lookAt(hrpPos + (hrpLook * 8) + Vector3.new(0, 5, 0), clockPos),
+        FieldOfView = 45
+    }):Play()
+
+    task.wait(1.8)
+
+    -- 3. Растворение курантов
+    for _, p in ipairs(clockModel:GetChildren()) do
+        if p:IsA("BasePart") then
+            TweenService:Create(p, TweenInfo.new(0.7), {
+                Transparency = 1,
+                Size = Vector3.new(0.1, 0.1, 0.1)
+            }):Play()
+        end
+    end
+
+    task.wait(0.7)
+    clockModel:Destroy()
+
+    -- 4. Завершение катсцены
+    TweenService:Create(blurEffect, TweenInfo.new(0.5), {Size = 0}):Play()
+    TweenService:Create(colorCorrection, TweenInfo.new(0.5), {
+        TintColor = Color3.fromRGB(255, 255, 255),
+        Saturation = 0
+    }):Play()
+    TweenService:Create(camera, TweenInfo.new(0.5), {FieldOfView = 70}):Play()
+
+    task.wait(0.3)
+    camera.CameraType = Enum.CameraType.Custom
+
+    -- 5. Появление интерфейса
+    mainFrame.Visible = true
+    mainFrame.Position = UDim2.new(1, -20, 1, -10)
+    
+    TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.new(1, -20, 1, -20)
+    }):Play()
+end
+
+-- Запуск новогодней катсцены
+task.spawn(playMidnightClockCutscene)
+
+-- ----------------------------------------------------------------------------
+-- СЕТЕВАЯ РЕПЛИКАЦИЯ И ЭФФЕКТЫ
+-- ----------------------------------------------------------------------------
+local function createGhostEcho(cf)
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    char.Archivable = true
+    local ghostModel = char:Clone()
+    char.Archivable = false
+
+    local hum = ghostModel:FindFirstChildOfClass("Humanoid")
+    if hum then hum:Destroy() end
+
+    for _, v in ipairs(ghostModel:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CanCollide = false
+            v.Anchored = true
+            v.Material = Enum.Material.Neon
+            v.Color = Theme.Accent
+            v.Transparency = 0.65
+        elseif v:IsA("LocalScript") or v:IsA("Script") then
+            v:Destroy()
+        end
+    end
+
+    ghostModel:PivotTo(cf)
+    ghostModel.Parent = Workspace
+
+    task.spawn(function()
+        for _ = 1, 8 do
+            task.wait(0.03)
+            for _, p in ipairs(ghostModel:GetChildren()) do
+                if p:IsA("BasePart") then
+                    p.Transparency = p.Transparency + 0.05
+                end
+            end
+        end
+        ghostModel:Destroy()
+    end)
+end
+
+local function applySmoothRewindPosition(targetCF)
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+
+    if hrp and targetCF then
+        hrp.Anchored = false
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+
+        local elevatedCF = targetCF + Vector3.new(0, 1.2, 0)
+        local currentPivot = char:GetPivot()
+        local smoothedCF = currentPivot:Lerp(elevatedCF, 0.45)
+        
+        char:PivotTo(smoothedCF)
+
+        if os.clock() - lastGhostSpawnTime > 0.08 then
+            lastGhostSpawnTime = os.clock()
+            createGhostEcho(smoothedCF)
+        end
+    end
+end
+
+local function disableRewindFX()
+    TweenService:Create(blurEffect, TweenInfo.new(0.3), {Size = 0}):Play()
+    TweenService:Create(colorCorrection, TweenInfo.new(0.3), {
+        TintColor = Color3.fromRGB(255, 255, 255),
+        Saturation = 0
+    }):Play()
+    TweenService:Create(camera, TweenInfo.new(0.3), {FieldOfView = 70}):Play()
+
+    local char = LocalPlayer.Character
+    if char then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.Anchored = false
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
+    end
+end
+
+local function enableRewindFX()
+    TweenService:Create(blurEffect, TweenInfo.new(0.2), {Size = 10}):Play()
+    TweenService:Create(colorCorrection, TweenInfo.new(0.2), {
+        TintColor = Color3.fromRGB(180, 220, 255),
+        Saturation = -0.3
+    }):Play()
+    TweenService:Create(camera, TweenInfo.new(0.2), {FieldOfView = 82}):Play()
+end
+
+-- Сброс ползунка к 100%
+resetBtn.MouseButton1Click:Connect(function()
+    if #historyBuffer > 0 then
+        currentHistoryIndex = #historyBuffer
+        fill.Size = UDim2.new(1, 0, 1, 0)
+        knob.Position = UDim2.new(1, 0, 0.5, 0)
+        
+        timeLabel.Text = "⏱️ Настоящее (0.0s)"
+        timeLabel.TextColor3 = Theme.Green
+        
+        local record = historyBuffer[currentHistoryIndex]
+        if record then
+            applySmoothRewindPosition(record.cf)
+        end
+        task.wait(0.05)
+        disableRewindFX()
+    end
+end)
+
+-- Запись движения
+task.spawn(function()
+    while screenGui and screenGui.Parent do
+        if not isDraggingSlider then
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+            if hrp and hum and hum.Health > 0 then
+                local currentPos = hrp.Position
+                local now = os.clock()
+
+                if not lastRecordedPos or (currentPos - lastRecordedPos).Magnitude > 0.05 then
+                    table.insert(historyBuffer, {cf = hrp.CFrame, time = now})
+                    if #historyBuffer > MAX_HISTORY then
+                        table.remove(historyBuffer, 1)
+                    end
+                    currentHistoryIndex = #historyBuffer
+                    lastRecordedPos = currentPos
+                end
+            end
+        end
+        task.wait(0.03)
+    end
+end)
+
+-- УПРАВЛЕНИЕ ПОЛЗУНКОМ
+local function updateSliderFromMouse()
+    if #historyBuffer == 0 then return end
+
+    local mousePos = UserInputService:GetMouseLocation().X
+    local trackAbsPos = track.AbsolutePosition.X
+    local trackAbsSize = track.AbsoluteSize.X
+
+    local alpha = math.clamp((mousePos - trackAbsPos) / trackAbsSize, 0, 1)
+    
+    fill.Size = UDim2.new(alpha, 0, 1, 0)
+    knob.Position = UDim2.new(alpha, 0, 0.5, 0)
+
+    currentHistoryIndex = math.clamp(math.round(alpha * #historyBuffer), 1, #historyBuffer)
+    
+    local record = historyBuffer[currentHistoryIndex]
+    if record then
+        applySmoothRewindPosition(record.cf)
+        
+        local deltaSec = os.clock() - record.time
+        if alpha >= 0.99 or currentHistoryIndex == #historyBuffer then
+            timeLabel.Text = "⏱️ Настоящее (0.0s)"
+            timeLabel.TextColor3 = Theme.Green
+        else
+            local mins = math.floor(deltaSec / 60)
+            local secs = deltaSec % 60
+            timeLabel.Text = string.format("⏱️ -%02d:%04.1fs назад", mins, secs)
+            timeLabel.TextColor3 = Theme.Accent
+        end
+
+        secondPivot.Rotation = (alpha * 360 * 10) % 360
+    end
+end
+
+knob.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDraggingSlider = true
+        enableRewindFX()
+    end
+end)
+
+sliderCard.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDraggingSlider = true
+        enableRewindFX()
+        updateSliderFromMouse()
+    end
+end)
+
+table.insert(connections, UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if isDraggingSlider then
+            isDraggingSlider = false
+            disableRewindFX()
+        end
+    end
+end))
+
+table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+    if isDraggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        updateSliderFromMouse()
+    end
+end))
+
+-- ОБНОВЛЕНИЕ ЧАСОВ
+table.insert(connections, RunService.RenderStepped:Connect(function()
+    if not isDraggingSlider then
+        local currentTime = os.date("*t")
+        local sec = currentTime.sec
+        local min = currentTime.min
+        local hour = currentTime.hour % 12
+
+        secondPivot.Rotation = sec * 6
+        minutePivot.Rotation = (min * 6) + (sec * 0.1)
+        hourPivot.Rotation = (hour * 30) + (min * 0.5)
+    end
+end))
+
+-- DRAGGABLE
+local dragging, dragInput, dragStart, startPos
+
+clockDial.InputBegan:Connect(function(input)
+    if not isLocked and not isDraggingSlider and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+
+clockDial.InputChanged:Connect(function(input)
+    if not isLocked and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        dragInput = input
+    end
+end)
+
+table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging and not isLocked then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end))
+
+-- RIGHTSHIFT
+table.insert(connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        isUIVisible = not isUIVisible
+        mainFrame.Visible = isUIVisible
+    end
+end))
