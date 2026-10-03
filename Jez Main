@@ -1,7 +1,6 @@
--- ==========================================
---               J PROJECT v2.6              
---   Larger Fonts, Lockable Clock & Mobile   
--- ==========================================
+-- ============================================--
+--               J PROJECT v2.6                --
+-- ============================================--
 
 local UI_NAME = "J_PROJECT_SYSTEM"
 
@@ -93,6 +92,7 @@ local Localizations = {
         FlySpeedLabel = "Скорость:",
         InfJumpTitle = "🦘 Бесконечный прыжок (Inf Jump)",
         AntiAfkTitle = "🛡️ Защита от AFK",
+		AntiFlingTitle = "🛡️ Защита от Fling",
         NoclipTitle = "👻 Noclip (Сквозь стены)",
         EspTitle = "👁️ Подсветка игроков (ESP)",
         LightTitle = "💡 Аура света (PointLight)",
@@ -178,6 +178,7 @@ local Localizations = {
         FlySpeedLabel = "Speed:",
         InfJumpTitle = "🦘 Infinite Jump",
         AntiAfkTitle = "🛡️ Anti-AFK",
+		AntiFlingTitle = "🛡️ Anti-Fling Protection",
         NoclipTitle = "👻 Noclip (Walk through walls)",
         EspTitle = "👁️ Player ESP Highlight",
         LightTitle = "💡 Light Aura (PointLight)",
@@ -2467,6 +2468,104 @@ do
     end)
 end
 
+-- Anti Fling
+do
+    local antiFlingCard = Instance.new("Frame", playerPage)
+    antiFlingCard.Name = "AntiFlingCard"
+    antiFlingCard.Size = UDim2.new(1, -8, 0, 45)
+    antiFlingCard.BackgroundColor3 = CurrentTheme.Dark
+    antiFlingCard.BorderSizePixel = 0
+    antiFlingCard.ZIndex = 4
+    Instance.new("UICorner", antiFlingCard).CornerRadius = UDim.new(0, 10)
+
+    local antiFlingCardStroke = Instance.new("UIStroke", antiFlingCard)
+    antiFlingCardStroke.Thickness = 1.5
+    antiFlingCardStroke.Color = CurrentTheme.Grey
+    antiFlingCardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    table.insert(registeredButtons, {Button = antiFlingCard, Stroke = antiFlingCardStroke})
+
+    local antiFlingTitle = Instance.new("TextLabel", antiFlingCard)
+    antiFlingTitle.Name = "AntiFlingTitle"
+    antiFlingTitle.Size = UDim2.new(1, -100, 0, 45)
+    antiFlingTitle.Position = UDim2.new(0, 12, 0, 0)
+    antiFlingTitle.BackgroundTransparency = 1
+    antiFlingTitle.Text = L("AntiFlingTitle")
+    antiFlingTitle.Font = Enum.Font.GothamBold
+    antiFlingTitle.TextSize = 13
+    antiFlingTitle.TextColor3 = CurrentTheme.White
+    antiFlingTitle.TextXAlignment = Enum.TextXAlignment.Left
+    antiFlingTitle.ZIndex = 5
+
+    local antiFlingToggleBtn = Instance.new("TextButton", antiFlingCard)
+    antiFlingToggleBtn.Name = "AntiFlingToggleBtn"
+    antiFlingToggleBtn.Size = UDim2.new(0, 75, 0, 28)
+    antiFlingToggleBtn.Position = UDim2.new(1, -87, 0, 8.5)
+    antiFlingToggleBtn.BackgroundColor3 = CurrentTheme.Black
+    antiFlingToggleBtn.BorderSizePixel = 0
+    antiFlingToggleBtn.Text = "FLING" .. L("StatusOff")
+    antiFlingToggleBtn.Font = Enum.Font.GothamBold
+    antiFlingToggleBtn.TextSize = 10
+    antiFlingToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+    antiFlingToggleBtn.ZIndex = 6
+    Instance.new("UICorner", antiFlingToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local antiFlingToggleStroke = Instance.new("UIStroke", antiFlingToggleBtn)
+    antiFlingToggleStroke.Thickness = 1
+    antiFlingToggleStroke.Color = CurrentTheme.Grey
+    table.insert(registeredButtons, {Button = antiFlingToggleBtn, Stroke = antiFlingToggleStroke})
+
+    local isAntiFlingEnabled = false
+    local antiFlingConnection = nil
+
+    local function restoreOtherPlayersCollisions()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                local head = player.Character:FindFirstChild("Head")
+                local torso = player.Character:FindFirstChild("Torso") or player.Character:FindFirstChild("UpperTorso")
+                
+                if root then root.CanCollide = false end
+                if head then head.CanCollide = true end
+                if torso then torso.CanCollide = true end
+            end
+        end
+    end
+
+    antiFlingToggleBtn.MouseButton1Click:Connect(function()
+        isAntiFlingEnabled = not isAntiFlingEnabled
+        if isAntiFlingEnabled then
+            antiFlingToggleBtn.Text = "FLING" .. L("StatusOn")
+            antiFlingToggleBtn.TextColor3 = Color3.fromRGB(60, 225, 100)
+            
+            if antiFlingConnection then antiFlingConnection:Disconnect() end
+            antiFlingConnection = RunService.Stepped:Connect(function()
+                if not isAntiFlingEnabled then return end
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character then
+                        for _, part in ipairs(player.Character:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
+                                if part.AssemblyLinearVelocity.Magnitude > 35 or part.AssemblyAngularVelocity.Magnitude > 35 then
+                                    part.AssemblyLinearVelocity = Vector3.zero
+                                    part.AssemblyAngularVelocity = Vector3.zero
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        else
+            antiFlingToggleBtn.Text = "FLING" .. L("StatusOff")
+            antiFlingToggleBtn.TextColor3 = Color3.fromRGB(225, 60, 60)
+            if antiFlingConnection then
+                antiFlingConnection:Disconnect()
+                antiFlingConnection = nil
+            end
+            restoreOtherPlayersCollisions()
+        end
+    end)
+end
+
 -- Noclip
 do
     local noclipEnabled = false
@@ -3262,7 +3361,7 @@ task.spawn(function()
         local TeleportService = game:GetService("TeleportService")
         local queueOnTeleport = (syn and syn.queue_on_teleport) or queue_on_teleport or queueonteleport or (fluxus and fluxus.queue_on_teleport)
         if queueOnTeleport then
-            queueOnTeleport('repeat task.wait() until game:IsLoaded() loadstring(game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/J_3.txt"))()')
+            queueOnTeleport('repeat task.wait() until game:IsLoaded() loadstring(game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20Main"))()')
         end
 
         if #Players:GetPlayers() <= 1 then
@@ -3274,7 +3373,7 @@ task.spawn(function()
         end
     end).Name = "RejoinBtn"
 
-    -- Кнопка перезапуска GUI (безопасная перезагрузка J_3.txt)
+    -- Кнопка перезапуска GUI
     addStyledButton(settingsPage, L("RestartBtn"), function()
         stopRainbowTheme()
         espEnabled = false
@@ -3293,7 +3392,7 @@ task.spawn(function()
         task.spawn(function()
             task.wait(0.2)
             local success, code = pcall(function()
-                return game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/J_3.txt")
+                return game:HttpGet("https://raw.githubusercontent.com/Korol1Laguwok/Jez-Scripts/refs/heads/main/Jez%20Main")
             end)
 
             if success and code then
@@ -3301,15 +3400,15 @@ task.spawn(function()
                 if func then
                     func()
                 else
-                    warn("[J-Project Error] Ошибка синтаксиса в J_3.txt: " .. tostring(err))
+                    warn("[J-Project Error] Ошибка синтаксиса: " .. tostring(err))
                 end
             else
-                warn("[J-Project Error] Не удалось скачать J_3.txt!")
+                warn("[J-Project Error] Не удалось скачать скрипт!")
             end
         end)
     end).Name = "RestartBtn"
 
-    -- Кнопка полной выгрузки
+    -- Кнопка выгрузки
     addStyledButton(settingsPage, L("UnloadBtn"), function()
         stopRainbowTheme()
         espEnabled = false
@@ -3411,6 +3510,7 @@ function updateInterfaceLanguage()
 
     setText(byName(playerPage, "InfJumpTitle"), L("InfJumpTitle"))
     setText(byName(playerPage, "AntiAfkTitle"), L("AntiAfkTitle"))
+	setText(byName(playerPage, "AntiFlingTitle"), L("AntiFlingTitle"))
     setText(byName(playerPage, "NoclipTitle"), L("NoclipTitle"))
 
     setText(byName(playerPage, "VehicleFlyTitle"), L("VehicleFlyTitle"))
