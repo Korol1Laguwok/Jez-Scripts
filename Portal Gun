@@ -19,12 +19,18 @@ local PORTAL_BG_COLOR         = Color3.fromRGB(248, 248, 252)
 local BODY_COLOR              = Color3.fromRGB(150, 150, 145)
 local BODY_DARK               = Color3.fromRGB(45, 47, 45)
 local DEFAULT_PORTAL_LIFETIME = 10
-local PORTAL_SPAWN_DISTANCE   = 12
+
+-- ДАЛЬНОСТЬ СПАВНА ВХОДНОГО ПОРТАЛА (СБЕРЕДИ ВАС)
+local PORTAL_SPAWN_DISTANCE   = 12 
+
+-- ДАЛЬНОСТЬ СПАВНА ВЫХОДНОГО ПОРТАЛА ЗА СПИНОЙ ЧУЖОГО ИГРОКА
+local TARGET_PLAYER_OFFSET_BACK = 8 
+
 local PORTAL_HALF_HEIGHT      = 4.55
 
 -- ДАЛЬНОСТЬ РУЧНОЙ РАССТАНОВКИ ПОРТАЛОВ (G)
-local PICK_MAX_DISTANCE = 100000 -- максимальная дальность луча
-local PICK_AIR_DISTANCE = 5000   -- на каком расстоянии ставить портал, если луч ни во что не попал
+local PICK_MAX_DISTANCE = 100000 
+local PICK_AIR_DISTANCE = 5000   
 
 local PORTAL_COLOR_PALETTE = {
     Color3.fromRGB(255, 255, 255),
@@ -49,9 +55,9 @@ local function getGunScaleForCharacter()
     local humanoid = character:WaitForChild("Humanoid", 5)
     
     if humanoid and humanoid.RigType == Enum.HumanoidRigType.R6 then
-        return 0.40 -- Размер для R6
+        return 0.40
     else
-        return 0.58 -- Размер для R15
+        return 0.58
     end
 end
 
@@ -1309,7 +1315,7 @@ local function spawnPortalModel(entranceCFrame, targetPosition, targetPlaceId, p
                 end)
                 if not success then
                     warn("Teleport failed: " .. tostring(err))
-                    status.Text = "⚠️️ Ошибка телепортации: " .. tostring(err)
+                    status.Text = "⚠ Ошибка телепортации: " .. tostring(err)
                     status.TextColor3 = Color3.fromRGB(255, 100, 100)
                     teleportDebounce = false
                 end
@@ -1386,6 +1392,7 @@ local function createPortalPair(targetPosition, targetPlaceId, portalLifetime, e
     local requestId = portalRequestId
 
     local forward = root.CFrame.LookVector
+    -- Входной портал перед вашим игроком
     local entranceCFrame = CFrame.lookAt(root.Position + forward * PORTAL_SPAWN_DISTANCE, root.Position + forward * PORTAL_SPAWN_DISTANCE + forward)
 
     local startPos = root.Position + forward * 2 + Vector3.new(0, 0.5, 0)
@@ -1462,7 +1469,7 @@ tryCreateUnderSelfPortal = function()
             status.TextColor3 = Color3.fromRGB(255, 100, 100)
             return
         end
-        local exitCFrame = targetRoot.CFrame * CFrame.new(0, 0, 3.5)
+        local exitCFrame = targetRoot.CFrame * CFrame.new(0, 0, TARGET_PLAYER_OFFSET_BACK)
         createPortalUnderSelf(nil, nil, portalLifetime, exitCFrame)
         status.Text = string.format("⬇️ Портал под собой → к игроку %s", selectedPlayer.DisplayName)
         status.TextColor3 = WHITE_ACCENT
@@ -1516,7 +1523,6 @@ local function createMarker(transparency)
     return m
 end
 
--- размер маркера растёт с расстоянием, чтобы его было видно издалека
 local function getMarkerSize(position)
     local cam = workspace.CurrentCamera
     if not cam then return Vector3.one end
@@ -1539,7 +1545,6 @@ local function raycastFromMouse()
     local result = workspace:Raycast(ray.Origin, ray.Direction * PICK_MAX_DISTANCE, params)
     if result then return result end
 
-    -- ничего не попало (небо / пустота / незагруженная область): ставим портал в воздухе
     local flatBack = Vector3.new(-ray.Direction.X, 0, -ray.Direction.Z)
     if flatBack.Magnitude < 0.01 then flatBack = Vector3.new(0, 0, 1) end
     return {
@@ -1687,7 +1692,8 @@ createButton.MouseButton1Click:Connect(function()
             return
         end
 
-        local exitCFrame = targetRoot.CFrame * CFrame.new(0, 0, 3.5)
+        -- Выходной портал появляется за спиной выбранного игрока
+        local exitCFrame = targetRoot.CFrame * CFrame.new(0, 0, TARGET_PLAYER_OFFSET_BACK)
         createPortalPair(nil, nil, portalLifetime, exitCFrame)
 
         status.Text = string.format("Портал к игроку %s открыт!", selectedPlayer.DisplayName)
@@ -1722,4 +1728,4 @@ player.CharacterAdded:Connect(function()
     setup()
 end)
 
-print("Rick & Morty Portal Gun: Цветовая гамма обновлена (без лаймового) + R6/R15 поддержка + безлимитная дальность порталов (G)!")
+print("Rick & Morty Portal Gun: Исправлено! Вход спереди вас, выход сзади выбранного игрока.")
