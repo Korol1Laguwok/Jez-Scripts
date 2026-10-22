@@ -1,0 +1,1523 @@
+--[[
+    ========================================================================
+    СПАЙДЕР-СКРИПТ v11.1 (SPIDER RIGHT & ACCURATE WEB PATTERN)
+    LocalScript -> StarterPlayer > StarterPlayerScripts
+    ========================================================================
+--]]
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+
+if _G.__SpiderWalkShutdown then
+    pcall(_G.__SpiderWalkShutdown)
+    _G.__SpiderWalkShutdown = nil
+end
+
+--------------------------------------------------------------------------------
+-- 1. НАСТРОЙКИ ПО УМОЛЧАНИЮ И СОХРАНЕНИЕ
+--------------------------------------------------------------------------------
+local DEFAULT_WALK_SPEED = 20
+local DEFAULT_JUMP_POWER = 55
+local CONFIG_FILE = "SpiderWalk_Config.json"
+
+local CONFIG = {
+    TOGGLE_KEY = Enum.KeyCode.E,        -- Клавиша ВКЛ / ВЫКЛ режима паука
+    WALK_SPEED = DEFAULT_WALK_SPEED,   -- Скорость
+    JUMP_POWER = DEFAULT_JUMP_POWER,   -- Сила прыжка
+    JUMP_ANIM_TIME = 0.45,              -- Длина анимации прыжка
+    COYOTE_TIME = 0.35,                 -- Фора на краю
+    JUMP_COOLDOWN = 0.3,                -- Кулдаун прыжка
+    JUMP_AIR_BLOCK = 0.2,               -- Блокировка прилипания при прыжке
+
+    RAY_FORWARD_DIST = 5.0,             -- Дальний луч поиска стены
+    RAY_DOWN_EXTRA = 3.0,               -- Глубина луча под ногами
+    RAY_WRAP_AHEAD = 1.4,               -- Вынос луча за край
+    RAY_WRAP_LENGTH = 6.5,              -- Длина улавливания за углом
+    RAY_VELOCITY_DIST = 6.0,            -- Луч стены в полете
+
+    HOVER_EXTRA = 0.1,                  -- Высота над поверхностью
+    HOVER_STIFFNESS = 25,               -- Жесткость прижатия
+    HOVER_MAX_SPEED = 35,               -- Макс. скорость прижатия
+    SNAP_SPEED = 30,                    -- Мгновенный клей
+
+    ACCELERATION = 30,                  -- Разгон
+    DECELERATION = 80,                  -- Торможение
+    AIR_ACCEL = 20,                     -- Контроль в воздухе
+    ALIGN_RESPONSIVENESS = 30,          -- Скорость разворота тела
+    NORMAL_SMOOTH_SPEED = 18,           -- Плавность смены граней
+    CAMERA_SMOOTH_SPEED = 12,           -- Плавность камеры
+    AIR_SURFACE_CHECK = 80,             -- Дальность поиска стены в воздухе
+    AIR_BLEND_TIME = 0.3,               -- Сброс гравитации
+    AIR_MAX_SURFACE_TIME = 3.0,         -- Время притяжения в воздухе
+    MAX_AIR_SPEED = 100,                -- Ограничение скорости
+
+    ANIMS = {
+        R15 = { WALK = "rbxassetid://507777826", IDLE = "rbxassetid://507766388", JUMP = "rbxassetid://507765000", FALL = "rbxassetid://507767968" },
+        R6  = { WALK = "rbxassetid://180426354", IDLE = "rbxassetid://180435571", JUMP = "rbxassetid://125750702", FALL = "rbxassetid://180436148" },
+    },
+}
+
+local currentBindKeys = { Enum.KeyCode.R }
+local isBindingReset = false
+
+local function saveConfig()
+    local keysToSave = {}
+    for _, k in ipairs(currentBindKeys) do
+        table.insert(keysToSave, k.Name)
+    end
+    local data = {
+        WALK_SPEED = CONFIG.WALK_SPEED,
+        JUMP_POWER = CONFIG.JUMP_POWER,
+        RESET_KEYS = keysToSave
+    }
+    pcall(function()
+        if writefile then
+            writefile(CONFIG_FILE, HttpService:JSONEncode(data))
+        end
+    end)
+end
+
+local function loadConfig()
+    pcall(function()
+        if readfile and isfile and isfile(CONFIG_FILE) then
+            local raw = readfile(CONFIG_FILE)
+            local data = HttpService:JSONDecode(raw)
+            if data then
+                if type(data.WALK_SPEED) == "number" then CONFIG.WALK_SPEED = data.WALK_SPEED end
+                if type(data.JUMP_POWER) == "number" then CONFIG.JUMP_POWER = data.JUMP_POWER end
+                if type(data.RESET_KEYS) == "table" and #data.RESET_KEYS > 0 then
+                    currentBindKeys = {}
+                    for _, name in ipairs(data.RESET_KEYS) do
+                        if Enum.KeyCode[name] then
+                            table.insert(currentBindKeys, Enum.KeyCode[name])
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if #currentBindKeys == 0 then
+        currentBindKeys = { Enum.KeyCode.R }
+    end
+end
+
+loadConfig()
+
+--------------------------------------------------------------------------------
+-- 2. СОСТОЯНИЕ
+--------------------------------------------------------------------------------
+local character, humanoid, hrp, animator = nil, nil, nil, nil
+
+local destroyed = false
+local active = false
+local grounded = false
+local uiHovered = false
+local currentNormal = Vector3.yAxis
+local targetNormal = Vector3.yAxis
+local planeVel = Vector3.zero
+local hover = 3
+local lastInput = Vector3.zero
+local lastError = ""
+
+local lastJumpTime = 0
+local airBlockUntil = 0
+local airTime = 0
+local filterTimer = 0
+local statusTimer = 0
+local noSurfaceTime = 0
+local airBlend = 0
+local lastSurfaceTime = 0
+local speedMultiplier = 1
+local jumpMultiplier = 1
+local currentAnim = nil
+
+local camUp = Vector3.yAxis
+local lastCamRot = CFrame.new()
+
+local hrpAttachment, vectorForce, alignOrientation, linearVelocity = nil, nil, nil, nil
+local walkTrack, idleTrack, jumpTrack, fallTrack = nil, nil, nil, nil
+local animateScript, animateWasEnabled = nil, false
+
+local Controls = nil
+local CameraModuleRef = nil
+local connections = {}
+local diedConn = nil
+
+local screenGui = nil
+local panel, bodyFrame, toggleButton, statusLabel, helpPanel = nil, nil, nil, nil, nil
+local speedBox, jumpBox, resetButton, resetKeybindBtn = nil, nil, nil, nil
+
+local shutdown, disableSpider, enableSpider
+
+local raycastParams = RaycastParams.new()
+raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+raycastParams.IgnoreWater = true
+raycastParams.RespectCanCollide = true
+
+--------------------------------------------------------------------------------
+-- 3. МАТЕМАТИКА И ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+--------------------------------------------------------------------------------
+local function projectOnPlane(v, n)
+    return v - n * v:Dot(n)
+end
+
+local function perpendicular(v)
+    local p = v:Cross(Vector3.xAxis)
+    if p.Magnitude < 1e-3 then
+        p = v:Cross(Vector3.zAxis)
+    end
+    return p.Unit
+end
+
+local function rotationBetween(a, b)
+    local dot = math.clamp(a:Dot(b), -1, 1)
+    if dot > 0.99999 then
+        return CFrame.new()
+    end
+    local axis = a:Cross(b)
+    if axis.Magnitude < 1e-5 then
+        return CFrame.fromAxisAngle(perpendicular(a), math.pi)
+    end
+    return CFrame.fromAxisAngle(axis.Unit, math.acos(dot))
+end
+
+local function slerpVector(a, b, t)
+    local dot = math.clamp(a:Dot(b), -1, 1)
+    local angle = math.acos(dot)
+    if angle < 1e-3 then
+        return b
+    end
+    local axis = a:Cross(b)
+    if axis.Magnitude < 1e-4 then
+        axis = perpendicular(a)
+    else
+        axis = axis.Unit
+    end
+    return (CFrame.fromAxisAngle(axis, angle * t) * a).Unit
+end
+
+local function cast(origin, direction)
+    return Workspace:Raycast(origin, direction, raycastParams)
+end
+
+local function refreshFilter()
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then
+            table.insert(list, p.Character)
+        end
+    end
+    raycastParams.FilterDescendantsInstances = list
+end
+
+local function keyNamesToString(keys)
+    if #keys == 0 then return "[ Нет ]" end
+    local names = {}
+    for _, k in ipairs(keys) do
+        local name = k.Name
+        if name == "LeftControl" or name == "RightControl" then name = "Ctrl"
+        elseif name == "LeftShift" or name == "RightShift" then name = "Shift"
+        elseif name == "LeftAlt" or name == "RightAlt" then name = "Alt" end
+        table.insert(names, name)
+    end
+    return "[ " .. table.concat(names, "+") .. " ]"
+end
+
+--------------------------------------------------------------------------------
+-- 4. МИКРО-СКАНЕР СТОП
+--------------------------------------------------------------------------------
+local function checkMicroFootSurfaces(pos, normal, dist)
+    local centerHit = cast(pos, -normal * dist)
+    if centerHit then return centerHit end
+
+    local cf = hrp.CFrame
+    local r = cf.RightVector * 0.7
+    local f = cf.LookVector * 0.7
+
+    local offsets = { r, -r, f, -f, r + f, r - f, -r + f, -r - f }
+    for _, offset in ipairs(offsets) do
+        local hit = cast(pos + offset, -normal * dist)
+        if hit then return hit end
+    end
+
+    return nil
+end
+
+--------------------------------------------------------------------------------
+-- 5. ВВОД И ЛОГИКА КЛАВИШ
+--------------------------------------------------------------------------------
+task.spawn(function()
+    local ok, module = pcall(function()
+        local playerScripts = LocalPlayer:WaitForChild("PlayerScripts")
+        return require(playerScripts:WaitForChild("PlayerModule"))
+    end)
+    if ok then
+        pcall(function() Controls = module:GetControls() end)
+        pcall(function() CameraModuleRef = module:GetCameras() end)
+    end
+end)
+
+local function getMoveInput()
+    local v = nil
+    if Controls then
+        pcall(function()
+            local res = Controls:GetMoveVector()
+            if typeof(res) == "Vector3" then v = res end
+        end)
+    end
+
+    if not v then
+        local x = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
+        local z = (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0)
+        v = Vector3.new(x, 0, z)
+    end
+
+    if v.Magnitude > 1 then v = v.Unit end
+    return v
+end
+
+local function computeMoveDirection(input, normal)
+    if input.Magnitude < 0.05 then return Vector3.zero end
+
+    local cam = Workspace.CurrentCamera
+    if not cam then return Vector3.zero end
+
+    local camCF = cam.CFrame
+    local forward = projectOnPlane(camCF.LookVector, normal)
+    if forward.Magnitude < 0.1 then
+        forward = projectOnPlane(camCF.UpVector, normal)
+    end
+    if forward.Magnitude < 0.01 then return Vector3.zero end
+    forward = forward.Unit
+
+    local right = forward:Cross(normal)
+    local dir = right * input.X + forward * (-input.Z)
+    if dir.Magnitude > 1 then dir = dir.Unit end
+    return dir
+end
+
+local function checkResetKeysPressed(inputKey)
+    if #currentBindKeys == 0 then return false end
+    if #currentBindKeys == 1 then
+        return inputKey == currentBindKeys[1]
+    elseif #currentBindKeys == 2 then
+        local k1, k2 = currentBindKeys[1], currentBindKeys[2]
+        if inputKey == k1 then
+            return UserInputService:IsKeyDown(k2)
+        elseif inputKey == k2 then
+            return UserInputService:IsKeyDown(k1)
+        end
+    end
+    return false
+end
+
+--------------------------------------------------------------------------------
+-- 6. ФИЗИКА И АНИМАЦИИ (СОХРАНЕНИЕ КУПЛЕННЫХ АНИМАЦИЙ)
+--------------------------------------------------------------------------------
+local function computeHover()
+    if humanoid.RigType == Enum.HumanoidRigType.R15 then
+        return humanoid.HipHeight + hrp.Size.Y / 2 + CONFIG.HOVER_EXTRA
+    end
+    return hrp.Size.Y / 2 + 2 + CONFIG.HOVER_EXTRA
+end
+
+local function getWalkSpeed()
+    local ws = CONFIG.WALK_SPEED
+    if humanoid and humanoid.WalkSpeed > 0 then ws = humanoid.WalkSpeed end
+    return ws * speedMultiplier
+end
+
+local function getJumpPower()
+    local power = CONFIG.JUMP_POWER
+    if humanoid then
+        if humanoid.UseJumpPower then
+            power = humanoid.JumpPower
+        else
+            power = math.sqrt(2 * Workspace.Gravity * humanoid.JumpHeight)
+        end
+    end
+    if power < 10 then power = CONFIG.JUMP_POWER end
+    return power * jumpMultiplier
+end
+
+local function cleanupPhysics()
+    if vectorForce then vectorForce:Destroy() vectorForce = nil end
+    if alignOrientation then alignOrientation:Destroy() alignOrientation = nil end
+    if linearVelocity then linearVelocity:Destroy() linearVelocity = nil end
+    if hrpAttachment then hrpAttachment:Destroy() hrpAttachment = nil end
+end
+
+local function setupPhysics()
+    cleanupPhysics()
+
+    hrpAttachment = Instance.new("Attachment")
+    hrpAttachment.Name = "SpiderAttachment"
+    hrpAttachment.Parent = hrp
+
+    vectorForce = Instance.new("VectorForce")
+    vectorForce.Name = "SpiderGravity"
+    vectorForce.Attachment0 = hrpAttachment
+    vectorForce.RelativeTo = Enum.ActuatorRelativeTo.World
+    vectorForce.ApplyAtCenterOfMass = true
+    vectorForce.Force = Vector3.zero
+    vectorForce.Parent = hrp
+
+    alignOrientation = Instance.new("AlignOrientation")
+    alignOrientation.Name = "SpiderOrientation"
+    alignOrientation.Attachment0 = hrpAttachment
+    alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    alignOrientation.RigidityEnabled = false
+    alignOrientation.Responsiveness = CONFIG.ALIGN_RESPONSIVENESS
+    alignOrientation.MaxTorque = 1e7
+    alignOrientation.MaxAngularVelocity = math.huge
+    alignOrientation.CFrame = hrp.CFrame
+    alignOrientation.Parent = hrp
+
+    linearVelocity = Instance.new("LinearVelocity")
+    linearVelocity.Name = "SpiderVelocity"
+    linearVelocity.Attachment0 = hrpAttachment
+    linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+    linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+    linearVelocity.MaxForce = 1e7
+    linearVelocity.VectorVelocity = Vector3.zero
+    linearVelocity.Enabled = false
+    linearVelocity.Parent = hrp
+end
+
+local function getEquippedAnimId(animName, defaultId)
+    local animScript = character and character:FindFirstChild("Animate")
+    if animScript then
+        local folder = animScript:FindFirstChild(animName)
+        if folder then
+            for _, child in ipairs(folder:GetChildren()) do
+                if child:IsA("Animation") and child.AnimationId ~= "" then
+                    return child.AnimationId
+                end
+            end
+        end
+    end
+    return defaultId
+end
+
+local function loadAnimations()
+    if walkTrack and idleTrack then return end
+
+    animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+
+    local rigType = (humanoid.RigType == Enum.HumanoidRigType.R15) and "R15" or "R6"
+    local data = CONFIG.ANIMS[rigType]
+
+    local walkId = getEquippedAnimId("walk", data.WALK)
+    local idleId = getEquippedAnimId("idle", data.IDLE)
+    local jumpId = getEquippedAnimId("jump", data.JUMP)
+    local fallId = getEquippedAnimId("fall", data.FALL)
+
+    local function loadTrack(id, priority, looped)
+        local ok, track = pcall(function()
+            local anim = Instance.new("Animation")
+            anim.AnimationId = id
+            local t = animator:LoadAnimation(anim)
+            t.Priority = priority
+            t.Looped = looped
+            return t
+        end)
+        return ok and track or nil
+    end
+
+    walkTrack = loadTrack(walkId, Enum.AnimationPriority.Action2, true)
+    idleTrack = loadTrack(idleId, Enum.AnimationPriority.Action, true)
+    jumpTrack = loadTrack(jumpId, Enum.AnimationPriority.Action3, false)
+    fallTrack = loadTrack(fallId, Enum.AnimationPriority.Action3, true)
+end
+
+local function takeOverAnimations()
+    animateScript = character:FindFirstChild("Animate")
+    if animateScript and animateScript:IsA("LocalScript") then
+        animateWasEnabled = animateScript.Enabled
+        animateScript.Enabled = false
+    else
+        animateScript = nil
+    end
+
+    if animator then
+        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+            if track ~= walkTrack and track ~= idleTrack and track ~= jumpTrack and track ~= fallTrack then
+                track:Stop(0.1)
+            end
+        end
+    end
+end
+
+local function releaseAnimations()
+    if walkTrack then walkTrack:Stop(0.1) walkTrack = nil end
+    if idleTrack then idleTrack:Stop(0.1) idleTrack = nil end
+    if jumpTrack then jumpTrack:Stop(0.1) jumpTrack = nil end
+    if fallTrack then fallTrack:Stop(0.1) fallTrack = nil end
+    currentAnim = nil
+    if animateScript and animateScript.Parent and animateWasEnabled then
+        animateScript.Enabled = true
+    end
+    animateScript = nil
+end
+
+local function playAnim(name)
+    if currentAnim == name then return end
+    local tracks = { walk = walkTrack, idle = idleTrack, jump = jumpTrack, fall = fallTrack }
+    for trackName, track in pairs(tracks) do
+        if trackName ~= name and track and track.IsPlaying then
+            track:Stop(0.1)
+        end
+    end
+    local track = tracks[name]
+    if track then track:Play(0.1) end
+    currentAnim = name
+end
+
+--------------------------------------------------------------------------------
+-- 7. КАМЕРА И УПРАВЛЕНИЕ МЫШЬЮ
+--------------------------------------------------------------------------------
+local function cameraPre()
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    local cf = cam.CFrame
+    cam.CFrame = CFrame.new(cf.Position) * (lastCamRot:Inverse() * (cf - cf.Position))
+end
+
+local function getDesiredZoom()
+    local cm = CameraModuleRef
+    if not cm then return nil end
+    local ctrl = cm.activeCameraController
+    if not ctrl then return nil end
+    local ok, d = pcall(function() return ctrl:GetCameraToSubjectDistance() end)
+    if ok and type(d) == "number" then return d end
+    return nil
+end
+
+local function cameraPost(dt)
+    local cam = Workspace.CurrentCamera
+    if not cam or not hrp or not hrp.Parent then return end
+
+    local targetUp = currentNormal
+    local stepUp = slerpVector(camUp, targetUp, 1 - math.exp(-dt * CONFIG.CAMERA_SMOOTH_SPEED))
+
+    local deltaRot = rotationBetween(camUp, stepUp)
+    camUp = stepUp
+    lastCamRot = deltaRot * lastCamRot
+
+    local cf = cam.CFrame
+    local head = character:FindFirstChild("Head") or hrp
+    local focus = head.Position + camUp * 0.6
+
+    local rel = cf.Position - focus
+    local dist = rel.Magnitude
+    local dir = (dist > 1e-3) and rel.Unit or -cf.LookVector
+
+    local desired = getDesiredZoom()
+    if desired and desired > dist then dist = desired end
+
+    local rdir = lastCamRot * dir
+    if dist > 1.2 then
+        local camRayParams = RaycastParams.new()
+        camRayParams.FilterType = Enum.RaycastFilterType.Exclude
+        camRayParams.FilterDescendantsInstances = {character}
+        camRayParams.IgnoreWater = true
+
+        local hit = Workspace:Raycast(focus, rdir * dist, camRayParams)
+        if hit then
+            dist = math.max(hit.Distance - 0.4, 2.0)
+        end
+    end
+
+    cam.CFrame = CFrame.new(focus + rdir * dist) * lastCamRot * (cf - cf.Position)
+end
+
+local function safeCameraPre() pcall(cameraPre) end
+local function safeCameraPost(dt) pcall(cameraPost, dt) end
+
+local function bindCamera()
+    RunService:UnbindFromRenderStep("SpiderCameraPre")
+    RunService:UnbindFromRenderStep("SpiderCameraPost")
+    RunService:BindToRenderStep("SpiderCameraPre", Enum.RenderPriority.Camera.Value - 1, safeCameraPre)
+    RunService:BindToRenderStep("SpiderCameraPost", Enum.RenderPriority.Camera.Value + 1, safeCameraPost)
+end
+
+local function unbindCamera()
+    RunService:UnbindFromRenderStep("SpiderCameraPre")
+    RunService:UnbindFromRenderStep("SpiderCameraPost")
+
+    local cam = Workspace.CurrentCamera
+    if cam then
+        if (camUp - Vector3.yAxis).Magnitude > 0.08 then
+            local cf = cam.CFrame
+            cam.CFrame = CFrame.new(cf.Position) * (lastCamRot:Inverse() * (cf - cf.Position))
+        end
+    end
+    lastCamRot = CFrame.new()
+    camUp = Vector3.yAxis
+end
+
+local function mouseOverride()
+    if not active then return end
+    if uiHovered then
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+    end
+end
+
+local function bindMouse()
+    RunService:UnbindFromRenderStep("SpiderMouse")
+    RunService:BindToRenderStep("SpiderMouse", Enum.RenderPriority.Camera.Value + 2, function()
+        pcall(mouseOverride)
+    end)
+end
+
+local function unbindMouse()
+    RunService:UnbindFromRenderStep("SpiderMouse")
+    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    UserInputService.MouseIconEnabled = true
+end
+
+--------------------------------------------------------------------------------
+-- 8. ПРЫЖОК
+--------------------------------------------------------------------------------
+local function tryJump()
+    if not active or not grounded or not hrp or not linearVelocity then return end
+
+    local now = os.clock()
+    if now - lastJumpTime < CONFIG.JUMP_COOLDOWN then return end
+    lastJumpTime = now
+    airBlockUntil = now + CONFIG.JUMP_AIR_BLOCK
+
+    grounded = false
+    noSurfaceTime = 0
+    airBlend = 0
+    lastSurfaceTime = -1000
+    linearVelocity.Enabled = false
+    
+    hrp.AssemblyLinearVelocity = planeVel + currentNormal * getJumpPower()
+end
+
+--------------------------------------------------------------------------------
+-- 9. ГЛАВНЫЙ ЦИКЛ ДВИЖЕНИЯ
+--------------------------------------------------------------------------------
+local WRAP_DEPTHS = { 0.2, 0.8, 1.8, 3.5, 5.0 }
+
+local function castForward(pos, dir)
+    local hit = cast(pos, dir * CONFIG.RAY_FORWARD_DIST)
+    if hit then return hit end
+    return cast(pos - currentNormal * math.max(hover - 0.4, 0.3), dir * CONFIG.RAY_FORWARD_DIST)
+end
+
+local function onHeartbeat(dt)
+    if not active then return end
+    if not (character and character.Parent and humanoid and hrp and hrp.Parent) or humanoid.Health <= 0 then return end
+    if not (linearVelocity and vectorForce and alignOrientation) then return end
+
+    local now = os.clock()
+
+    filterTimer += dt
+    if filterTimer > 0.5 then
+        filterTimer = 0
+        refreshFilter()
+    end
+
+    humanoid.PlatformStand = true
+
+    currentNormal = slerpVector(currentNormal, targetNormal, 1 - math.exp(-dt * CONFIG.NORMAL_SMOOTH_SPEED))
+
+    local input = getMoveInput()
+    lastInput = input
+    local moveDir = computeMoveDirection(input, currentNormal)
+    local moving = moveDir.Magnitude > 0.05
+
+    if humanoid.Jump then
+        humanoid.Jump = false
+        tryJump()
+    end
+
+    local pos = hrp.Position
+    local rayDownDist = hover + CONFIG.RAY_DOWN_EXTRA
+
+    local downHit = checkMicroFootSurfaces(pos, currentNormal, rayDownDist)
+
+    if now >= airBlockUntil then
+        local newNormal = nil
+        local fwdHit = nil
+
+        if moving then
+            fwdHit = castForward(pos, moveDir.Unit)
+        else
+            fwdHit = cast(pos, hrp.CFrame.LookVector * CONFIG.RAY_FORWARD_DIST)
+        end
+
+        local predictDown = moving and checkMicroFootSurfaces(pos + moveDir.Unit * 1.5, currentNormal, rayDownDist) or nil
+
+        if fwdHit then
+            newNormal = fwdHit.Normal
+        elseif downHit then
+            newNormal = downHit.Normal
+        elseif predictDown then
+            newNormal = predictDown.Normal
+        elseif moving then
+            local dir = moveDir.Unit
+            for _, depth in ipairs(WRAP_DEPTHS) do
+                local origin = pos + dir * CONFIG.RAY_WRAP_AHEAD - currentNormal * (hover + depth)
+                local wrapHit = cast(origin, -dir * CONFIG.RAY_WRAP_LENGTH)
+                if wrapHit then
+                    newNormal = wrapHit.Normal
+                    break
+                end
+            end
+        end
+
+        if not newNormal and grounded then
+            local searchDirs = {
+                -currentNormal,
+                hrp.CFrame.LookVector,
+                -hrp.CFrame.LookVector,
+                hrp.CFrame.RightVector,
+                -hrp.CFrame.RightVector
+            }
+            for _, d in ipairs(searchDirs) do
+                local edgeHit = cast(pos, d * 4.5)
+                if edgeHit then
+                    newNormal = edgeHit.Normal
+                    break
+                end
+            end
+
+            if not newNormal and (now - lastSurfaceTime < CONFIG.COYOTE_TIME or not moving) then
+                newNormal = targetNormal
+            end
+        end
+
+        if not newNormal and not grounded then
+            local vel = hrp.AssemblyLinearVelocity
+            if vel.Magnitude > 5 then
+                local velHit = cast(pos, vel.Unit * CONFIG.RAY_VELOCITY_DIST)
+                if velHit then
+                    newNormal = velHit.Normal
+                end
+            end
+        end
+
+        if newNormal then
+            targetNormal = slerpVector(targetNormal, newNormal, 1 - math.exp(-dt * 20))
+            grounded = true
+            lastSurfaceTime = now
+        else
+            grounded = false
+        end
+    elseif now < airBlockUntil then
+        grounded = false
+    end
+
+    if grounded then
+        airTime = 0
+        noSurfaceTime = 0
+        airBlend = 0
+    else
+        airTime += dt
+        local pullHit = cast(pos, -currentNormal * CONFIG.AIR_SURFACE_CHECK)
+        if pullHit and airTime < CONFIG.AIR_MAX_SURFACE_TIME then
+            noSurfaceTime = math.max(noSurfaceTime - dt * 4, 0)
+        else
+            noSurfaceTime += dt
+        end
+        airBlend = math.clamp(noSurfaceTime / CONFIG.AIR_BLEND_TIME, 0, 1)
+        if airBlend >= 1 then
+            targetNormal = Vector3.yAxis
+        end
+    end
+
+    local mass = hrp.AssemblyMass
+    local g = Workspace.Gravity
+    local planarMove = projectOnPlane(moveDir, currentNormal)
+
+    if grounded then
+        local normalVel = Vector3.zero
+        if downHit then
+            local err = hover - downHit.Distance
+            local targetSpeed = math.clamp(err * CONFIG.HOVER_STIFFNESS, -CONFIG.HOVER_MAX_SPEED, CONFIG.HOVER_MAX_SPEED)
+            normalVel = currentNormal * targetSpeed
+        else
+            normalVel = -currentNormal * CONFIG.SNAP_SPEED
+        end
+
+        local target = planarMove * getWalkSpeed()
+        local currentPlaneVel = projectOnPlane(planeVel, currentNormal)
+        local rate = (target.Magnitude < currentPlaneVel.Magnitude) and CONFIG.DECELERATION or CONFIG.ACCELERATION
+        planeVel = currentPlaneVel:Lerp(target, 1 - math.exp(-dt * rate))
+
+        linearVelocity.Enabled = true
+        linearVelocity.VectorVelocity = planeVel + normalVel
+    else
+        linearVelocity.Enabled = false
+        planeVel = projectOnPlane(hrp.AssemblyLinearVelocity, currentNormal)
+    end
+
+    local gravityDir = -currentNormal
+    if not grounded and airBlend > 0 then
+        gravityDir = gravityDir * (1 - airBlend) + Vector3.new(0, -1, 0) * airBlend
+    end
+    local force = (Vector3.yAxis + gravityDir) * (g * mass)
+    if not grounded and moving then
+        force += planarMove * (CONFIG.AIR_ACCEL * mass)
+    end
+    vectorForce.Force = force
+
+    if not grounded then
+        local vel = hrp.AssemblyLinearVelocity
+        if vel.Magnitude > CONFIG.MAX_AIR_SPEED then
+            hrp.AssemblyLinearVelocity = vel.Unit * CONFIG.MAX_AIR_SPEED
+        end
+    end
+
+    local cam = Workspace.CurrentCamera
+    local isLockedMouse = (UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+        or (cam and (cam.CFrame.Position - cam.Focus.Position).Magnitude < 1.2)
+
+    local facing
+    if moving then
+        facing = planarMove
+    elseif isLockedMouse and cam then
+        facing = projectOnPlane(cam.CFrame.LookVector, currentNormal)
+    else
+        facing = projectOnPlane(hrp.CFrame.LookVector, currentNormal)
+    end
+
+    if facing.Magnitude < 0.05 then
+        facing = perpendicular(currentNormal)
+    else
+        facing = facing.Unit
+    end
+    alignOrientation.CFrame = CFrame.lookAt(pos, pos + facing, currentNormal)
+
+    if grounded then
+        if moving then
+            playAnim("walk")
+            if walkTrack then
+                walkTrack:AdjustSpeed(math.clamp(planeVel.Magnitude / 16, 0.5, 1.6))
+            end
+        else
+            playAnim("idle")
+        end
+    else
+        if now - lastJumpTime < CONFIG.JUMP_ANIM_TIME then
+            playAnim("jump")
+        else
+            playAnim("fall")
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
+-- 10. РЕАЛИСТИЧНАЯ ПАУТИНА С ВОГНУТЫМИ ДУГАМИ (КАК НА ФОТО)
+--------------------------------------------------------------------------------
+local function drawProceduralWeb(parentFrame, centerX, centerY)
+    local webContainer = Instance.new("Frame")
+    webContainer.Name = "WebContainer"
+    webContainer.Size = UDim2.new(1, 0, 1, 0)
+    webContainer.BackgroundTransparency = 1
+    webContainer.ClipsDescendants = true
+    webContainer.ZIndex = 1
+    webContainer.Parent = parentFrame
+
+    local rays = 14
+    local angleStep = 360 / rays
+    local maxDist = 260
+    local lineColor = Color3.fromRGB(80, 75, 75) -- Тёмно-серый тон как на образце
+
+    -- Прямые лучи паутины
+    for i = 1, rays do
+        local deg = (i - 1) * angleStep
+        local line = Instance.new("Frame")
+        line.Size = UDim2.fromOffset(maxDist, 1.5)
+        line.Position = UDim2.fromOffset(centerX, centerY)
+        line.Rotation = deg
+        line.AnchorPoint = Vector2.new(0, 0.5)
+        line.BackgroundColor3 = lineColor
+        line.BackgroundTransparency = 0.2
+        line.BorderSizePixel = 0
+        line.Parent = webContainer
+    end
+
+    local function drawLine(p1, p2, transp)
+        local dx, dy = p2.X - p1.X, p2.Y - p1.Y
+        local dist = math.sqrt(dx * dx + dy * dy)
+        if dist < 0.5 then return end
+        local angle = math.deg(math.atan2(dy, dx))
+
+        local seg = Instance.new("Frame")
+        seg.Size = UDim2.fromOffset(dist, 1.5)
+        seg.Position = UDim2.fromOffset((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2)
+        seg.AnchorPoint = Vector2.new(0.5, 0.5)
+        seg.Rotation = angle
+        seg.BackgroundColor3 = lineColor
+        seg.BackgroundTransparency = transp or 0.25
+        seg.BorderSizePixel = 0
+        seg.ZIndex = 1
+        seg.Parent = webContainer
+    end
+
+    -- Кольцевые дуги с закруглением внутрь к центру
+    local radii = { 15, 30, 50, 75, 105, 140, 180, 225 }
+    local centerVec = Vector2.new(centerX, centerY)
+
+    for _, r in ipairs(radii) do
+        for i = 1, rays do
+            local a1 = math.rad((i - 1) * angleStep)
+            local a2 = math.rad(i * angleStep)
+
+            local p1 = centerVec + Vector2.new(math.cos(a1) * r, math.sin(a1) * r)
+            local p2 = centerVec + Vector2.new(math.cos(a2) * r, math.sin(a2) * r)
+
+            -- Создание вогнутой дуги (дуга вогнута к центру)
+            local mid = (p1 + p2) / 2
+            local sagAmount = 0.28
+            local sagPoint = mid + (centerVec - mid) * sagAmount
+
+            drawLine(p1, sagPoint, 0.25)
+            drawLine(sagPoint, p2, 0.25)
+        end
+    end
+end
+
+local function drawProceduralSpider(parentFrame, centerX, centerY)
+    local spiderFrame = Instance.new("Frame")
+    spiderFrame.Name = "SpiderGraphic"
+    spiderFrame.Size = UDim2.fromOffset(45, 45)
+    spiderFrame.Position = UDim2.fromOffset(centerX, centerY)
+    spiderFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    spiderFrame.BackgroundTransparency = 1
+    spiderFrame.ZIndex = 4
+    spiderFrame.Parent = parentFrame
+
+    local abdomen = Instance.new("Frame")
+    abdomen.Size = UDim2.fromOffset(12, 16)
+    abdomen.Position = UDim2.fromOffset(22.5, 27)
+    abdomen.AnchorPoint = Vector2.new(0.5, 0.5)
+    abdomen.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+    abdomen.BorderSizePixel = 0
+    abdomen.ZIndex = 5
+    abdomen.Parent = spiderFrame
+    local c1 = Instance.new("UICorner")
+    c1.CornerRadius = UDim.new(1, 0)
+    c1.Parent = abdomen
+
+    local thorax = Instance.new("Frame")
+    thorax.Size = UDim2.fromOffset(9, 10)
+    thorax.Position = UDim2.fromOffset(22.5, 17)
+    thorax.AnchorPoint = Vector2.new(0.5, 0.5)
+    thorax.BackgroundColor3 = Color3.fromRGB(210, 210, 210)
+    thorax.BorderSizePixel = 0
+    thorax.ZIndex = 6
+    thorax.Parent = spiderFrame
+    local c2 = Instance.new("UICorner")
+    c2.CornerRadius = UDim.new(1, 0)
+    c2.Parent = thorax
+
+    local fangL = Instance.new("Frame")
+    fangL.Size = UDim2.fromOffset(2, 4)
+    fangL.Position = UDim2.fromOffset(20, 10)
+    fangL.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    fangL.BorderSizePixel = 0
+    fangL.ZIndex = 6
+    fangL.Parent = spiderFrame
+
+    local fangR = Instance.new("Frame")
+    fangR.Size = UDim2.fromOffset(2, 4)
+    fangR.Position = UDim2.fromOffset(23, 10)
+    fangR.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    fangR.BorderSizePixel = 0
+    fangR.ZIndex = 6
+    fangR.Parent = spiderFrame
+
+    local function createSegment(p1, p2, thickness)
+        local dx, dy = p2.X - p1.X, p2.Y - p1.Y
+        local dist = math.sqrt(dx * dx + dy * dy)
+        local angle = math.deg(math.atan2(dy, dx))
+
+        local seg = Instance.new("Frame")
+        seg.Size = UDim2.fromOffset(dist, thickness)
+        seg.Position = UDim2.fromOffset((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2)
+        seg.AnchorPoint = Vector2.new(0.5, 0.5)
+        seg.Rotation = angle
+        seg.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+        seg.BorderSizePixel = 0
+        seg.ZIndex = 4
+        seg.Parent = spiderFrame
+    end
+
+    local legsData = {
+        { base = Vector2.new(18, 14), knee = Vector2.new(8, 6),   tip = Vector2.new(2, 12) },
+        { base = Vector2.new(18, 16), knee = Vector2.new(6, 12),  tip = Vector2.new(1, 21) },
+        { base = Vector2.new(18, 18), knee = Vector2.new(6, 21),  tip = Vector2.new(2, 31) },
+        { base = Vector2.new(18, 20), knee = Vector2.new(9, 28),  tip = Vector2.new(5, 39) },
+
+        { base = Vector2.new(27, 14), knee = Vector2.new(37, 6),  tip = Vector2.new(43, 12) },
+        { base = Vector2.new(27, 16), knee = Vector2.new(39, 12), tip = Vector2.new(44, 21) },
+        { base = Vector2.new(27, 18), knee = Vector2.new(39, 21), tip = Vector2.new(43, 31) },
+        { base = Vector2.new(27, 20), knee = Vector2.new(36, 28), tip = Vector2.new(40, 39) },
+    }
+
+    for _, leg in ipairs(legsData) do
+        createSegment(leg.base, leg.knee, 1.5)
+        createSegment(leg.knee, leg.tip, 1)
+    end
+end
+
+--------------------------------------------------------------------------------
+-- 11. ИНТЕРФЕЙС И ИНСТРУКЦИЯ
+--------------------------------------------------------------------------------
+local HELP_TEXT = [[<font color="#ffffff"><b>🕸️ ИНСТРУКЦИЯ ПО ПРИМЕНЕНИЮ:</b></font>
+
+✅ <b>Активация:</b> Клавиша <b>E</b> или главная кнопка в меню.
+
+✅ <b>Ходьба по стенам:</b> Идите (W/A/S/D) прямо на любую стену, столб или потолок — персонаж прилипнет автоматически.
+
+✅ <b>Прыжки:</b> Нажмите <b>Пробел</b> во время движения по стене, чтобы оттолкнуться.
+
+🔄 <b>Сброс курсора:</b> Нажмите кнопку <b>[ R ]</b>, если курсор застрял или заблокировался.]]
+
+local function surfaceName()
+    if not active then return "-" end
+    if not grounded then return "в воздухе" end
+    local y = currentNormal.Y
+    if y > 0.7 then return "пол" end
+    if y < -0.7 then return "потолок" end
+    return "стена"
+end
+
+local function updateUI()
+    if toggleButton then
+        toggleButton.Text = active and "🕷️ РЕЖИМ ПАУКА: ВКЛ" or "🕷️ РЕЖИМ ПАУКА: ВЫКЛ"
+        toggleButton.BackgroundColor3 = active and Color3.fromRGB(220, 220, 220) or Color3.fromRGB(30, 30, 30)
+        toggleButton.TextColor3 = active and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+    end
+    if statusLabel then
+        local text = string.format(
+            "Режим: %s\nПоверхность: %s\nВвод: %.1f / %.1f\nСкорость: %s\nПерсонаж: %s",
+            active and "ВКЛ" or "ВЫКЛ",
+            surfaceName(),
+            lastInput.X, lastInput.Z,
+            humanoid and string.format("%.0f (x%.1f)", getWalkSpeed(), speedMultiplier) or "-",
+            (humanoid and hrp) and "ок" or "нет"
+        )
+        if lastError ~= "" then text = text .. "\n⚠ " .. string.sub(lastError, 1, 90) end
+        statusLabel.Text = text
+    end
+    if resetKeybindBtn and not isBindingReset then
+        resetKeybindBtn.Text = keyNamesToString(currentBindKeys)
+    end
+end
+
+local function makeCorner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius)
+    c.Parent = parent
+    return c
+end
+
+local function makeButton(parent, text, size, position, color)
+    local b = Instance.new("TextButton")
+    b.Size = size
+    b.Position = position
+    b.BackgroundColor3 = color
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 12
+    b.AutoButtonColor = true
+    b.ZIndex = 10
+    b.Parent = parent
+    makeCorner(b, 8)
+    return b
+end
+
+local function makeLabel(parent, text, size, position, textSize)
+    local l = Instance.new("TextLabel")
+    l.Size = size
+    l.Position = position
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = Color3.fromRGB(200, 200, 200)
+    l.Font = Enum.Font.Gotham
+    l.TextSize = textSize or 12
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.ZIndex = 10
+    l.Parent = parent
+    return l
+end
+
+local function makeNumberBox(parent, position, defaultValue, minValue, maxValue, onApply)
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.fromOffset(80, 26)
+    box.Position = position
+    box.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    box.BorderSizePixel = 0
+    box.Text = tostring(defaultValue)
+    box.TextColor3 = Color3.fromRGB(255, 255, 255)
+    box.Font = Enum.Font.GothamMedium
+    box.TextSize = 13
+    box.ClearTextOnFocus = false
+    box.ZIndex = 10
+    box.Parent = parent
+    makeCorner(box, 6)
+
+    box.FocusLost:Connect(function()
+        local n = tonumber(box.Text)
+        if n then
+            n = math.clamp(n, minValue, maxValue)
+            onApply(n)
+            box.Text = tostring(n)
+            saveConfig()
+        else
+            box.Text = tostring(defaultValue)
+        end
+    end)
+    return box
+end
+
+local function createHelpWindow()
+    local frame = Instance.new("Frame")
+    frame.Name = "HelpPanel"
+    frame.Size = UDim2.new(0, 310, 0.85, 0)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.Position = UDim2.fromScale(0.5, 0.5)
+    frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    frame.BorderSizePixel = 0
+    frame.Visible = false
+    frame.ZIndex = 20
+    frame.Parent = screenGui
+    makeCorner(frame, 12)
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 1.5
+    stroke.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -52, 0, 36)
+    title.Position = UDim2.fromOffset(14, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "💡 ИНСТРУКЦИЯ"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 15
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 21
+    title.Parent = frame
+
+    local closeHelp = makeButton(frame, "X", UDim2.fromOffset(28, 24), UDim2.new(1, -36, 0, 6), Color3.fromRGB(40, 40, 40))
+    closeHelp.ZIndex = 22
+    closeHelp.MouseButton1Click:Connect(function()
+        frame.Visible = false
+    end)
+
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size = UDim2.new(1, -16, 1, -46)
+    scroll.Position = UDim2.fromOffset(8, 40)
+    scroll.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+    scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 5
+    scroll.ScrollBarImageColor3 = Color3.fromRGB(200, 200, 200)
+    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.ZIndex = 21
+    scroll.Parent = frame
+    makeCorner(scroll, 8)
+
+    local text = Instance.new("TextLabel")
+    text.Size = UDim2.new(1, -12, 0, 0)
+    text.Position = UDim2.fromOffset(6, 6)
+    text.AutomaticSize = Enum.AutomaticSize.Y
+    text.BackgroundTransparency = 1
+    text.RichText = true
+    text.TextWrapped = true
+    text.TextYAlignment = Enum.TextYAlignment.Top
+    text.TextXAlignment = Enum.TextXAlignment.Left
+    text.Text = HELP_TEXT
+    text.TextColor3 = Color3.fromRGB(230, 230, 230)
+    text.Font = Enum.Font.Gotham
+    text.TextSize = 13
+    text.ZIndex = 22
+    text.Parent = scroll
+
+    return frame
+end
+
+local function resetCursorOnly()
+    uiHovered = false
+    pcall(unbindMouse)
+    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    UserInputService.MouseIconEnabled = true
+    if active then
+        bindMouse()
+    end
+end
+
+local function startBindingReset()
+    if isBindingReset then return end
+    isBindingReset = true
+    resetKeybindBtn.Text = "[ Нажмите... ]"
+    resetKeybindBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+    resetKeybindBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+
+    local capturedKeys = {}
+    local connBegan, connEnded
+
+    connBegan = UserInputService.InputBegan:Connect(function(input, gpe)
+        if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+        if input.KeyCode == Enum.KeyCode.Unknown then return end
+
+        local exists = false
+        for _, k in ipairs(capturedKeys) do
+            if k == input.KeyCode then exists = true break end
+        end
+        if not exists then
+            table.insert(capturedKeys, input.KeyCode)
+        end
+
+        if #capturedKeys >= 2 then
+            currentBindKeys = { capturedKeys[1], capturedKeys[2] }
+            isBindingReset = false
+            resetKeybindBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            resetKeybindBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            resetKeybindBtn.Text = keyNamesToString(currentBindKeys)
+            if connBegan then connBegan:Disconnect() end
+            if connEnded then connEnded:Disconnect() end
+            saveConfig()
+        end
+    end)
+
+    connEnded = UserInputService.InputEnded:Connect(function(input, gpe)
+        if not isBindingReset then return end
+        if input.UserInputType == Enum.UserInputType.Keyboard and #capturedKeys == 1 then
+            task.delay(0.12, function()
+                if isBindingReset and #capturedKeys == 1 then
+                    currentBindKeys = { capturedKeys[1] }
+                    isBindingReset = false
+                    resetKeybindBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+                    resetKeybindBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    resetKeybindBtn.Text = keyNamesToString(currentBindKeys)
+                    if connBegan then connBegan:Disconnect() end
+                    if connEnded then connEnded:Disconnect() end
+                    saveConfig()
+                end
+            end)
+        end
+    end)
+end
+
+local function createUI()
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local old = playerGui:FindFirstChild("SpiderWalkGui")
+    if old then old:Destroy() end
+
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "SpiderWalkGui"
+    screenGui.ResetOnSpawn = false
+    screenGui.DisplayOrder = 999
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = playerGui
+
+    panel = Instance.new("Frame")
+    panel.Name = "SpiderPanel"
+    panel.Size = UDim2.fromOffset(260, 310)
+    panel.Position = UDim2.new(0, 12, 0, 80)
+    panel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    panel.BackgroundTransparency = 0
+    panel.BorderSizePixel = 0
+    panel.ClipsDescendants = true
+    panel.Parent = screenGui
+    makeCorner(panel, 12)
+
+    panel.MouseEnter:Connect(function() uiHovered = true end)
+    panel.MouseLeave:Connect(function() uiHovered = false end)
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 1.5
+    stroke.Parent = panel
+
+    -- Возврат паука и центра паутины в правую часть меню
+    local webCenterX = 190
+    local webCenterY = 125
+
+    drawProceduralWeb(panel, webCenterX, webCenterY)
+
+    bodyFrame = Instance.new("Frame")
+    bodyFrame.Name = "Body"
+    bodyFrame.Size = UDim2.new(1, 0, 1, -34)
+    bodyFrame.Position = UDim2.fromOffset(0, 34)
+    bodyFrame.BackgroundTransparency = 1
+    bodyFrame.ZIndex = 10
+    bodyFrame.Parent = panel
+
+    drawProceduralSpider(bodyFrame, webCenterX, webCenterY - 34)
+
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 34)
+    titleBar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    titleBar.BorderSizePixel = 0
+    titleBar.ZIndex = 10
+    titleBar.Parent = panel
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -120, 1, 0)
+    titleLabel.Position = UDim2.fromOffset(12, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "🕷️ SPIDER WALK v11.1"
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 13
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.ZIndex = 10
+    titleLabel.Parent = titleBar
+
+    local helpButton = makeButton(titleBar, "💡", UDim2.fromOffset(28, 24), UDim2.new(1, -102, 0, 5), Color3.fromRGB(50, 50, 50))
+    local minimizeButton = makeButton(titleBar, "-", UDim2.fromOffset(28, 24), UDim2.new(1, -68, 0, 5), Color3.fromRGB(30, 30, 30))
+    local closeButton = makeButton(titleBar, "X", UDim2.fromOffset(28, 24), UDim2.new(1, -34, 0, 5), Color3.fromRGB(80, 20, 20))
+
+    toggleButton = makeButton(bodyFrame, "", UDim2.new(1, -24, 0, 40), UDim2.fromOffset(12, 10), Color3.fromRGB(30, 30, 30))
+    toggleButton.TextSize = 14
+
+    statusLabel = makeLabel(bodyFrame, "", UDim2.new(1, -24, 0, 84), UDim2.fromOffset(12, 58), 12)
+    statusLabel.Font = Enum.Font.Code
+    statusLabel.TextWrapped = true
+
+    makeLabel(bodyFrame, "Скорость:", UDim2.fromOffset(100, 26), UDim2.fromOffset(12, 148), 12)
+    speedBox = makeNumberBox(bodyFrame, UDim2.fromOffset(168, 148), CONFIG.WALK_SPEED, 1, 200, function(n)
+        CONFIG.WALK_SPEED = n
+    end)
+
+    makeLabel(bodyFrame, "Сила прыжка:", UDim2.fromOffset(100, 26), UDim2.fromOffset(12, 180), 12)
+    jumpBox = makeNumberBox(bodyFrame, UDim2.fromOffset(168, 180), CONFIG.JUMP_POWER, 5, 200, function(n)
+        CONFIG.JUMP_POWER = n
+    end)
+
+    resetButton = makeButton(bodyFrame, "🔄 Курсор", UDim2.new(0.55, -12, 0, 32), UDim2.fromOffset(12, 220), Color3.fromRGB(50, 50, 50))
+    resetKeybindBtn = makeButton(bodyFrame, keyNamesToString(currentBindKeys), UDim2.new(0.45, -18, 0, 32), UDim2.new(0.55, 6, 0, 220), Color3.fromRGB(30, 30, 30))
+
+    toggleButton.MouseButton1Click:Connect(function()
+        if active then disableSpider(true) else enableSpider() end
+    end)
+
+    resetButton.MouseButton1Click:Connect(resetCursorOnly)
+    resetKeybindBtn.MouseButton1Click:Connect(startBindingReset)
+
+    helpPanel = createHelpWindow()
+    helpButton.MouseButton1Click:Connect(function()
+        helpPanel.Visible = not helpPanel.Visible
+    end)
+
+    local minimized = false
+    minimizeButton.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        bodyFrame.Visible = not minimized
+        panel.Size = minimized and UDim2.fromOffset(260, 34) or UDim2.fromOffset(260, 310)
+        minimizeButton.Text = minimized and "+" or "-"
+    end)
+
+    closeButton.MouseButton1Click:Connect(function()
+        if shutdown then shutdown() end
+    end)
+
+    local dragging = false
+    local dragStart, startPos = nil, nil
+
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = panel.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            local delta = input.Position - dragStart
+            panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end))
+
+    updateUI()
+end
+
+--------------------------------------------------------------------------------
+-- 12. ВКЛЮЧЕНИЕ / ВЫКЛЮЧЕНИЕ / ПОЛНОЕ УДАЛЕНИЕ
+--------------------------------------------------------------------------------
+function enableSpider()
+    if active then return end
+    if not character or not humanoid or not hrp or humanoid.Health <= 0 then return end
+
+    lastError = ""
+    refreshFilter()
+    raycastParams.CollisionGroup = hrp.CollisionGroup
+    hover = computeHover()
+
+    currentNormal = Vector3.yAxis
+    targetNormal = Vector3.yAxis
+    planeVel = Vector3.zero
+    grounded = false
+    airTime = 0
+    airBlockUntil = 0
+    filterTimer = 0
+    camUp = Vector3.yAxis
+    lastCamRot = CFrame.new()
+
+    setupPhysics()
+    loadAnimations()
+    takeOverAnimations()
+
+    humanoid.PlatformStand = true
+    humanoid.AutoRotate = false
+
+    active = true
+    bindCamera()
+    bindMouse()
+    updateUI()
+end
+
+function disableSpider(upright)
+    if not active then return end
+    active = false
+
+    unbindCamera()
+    unbindMouse()
+    cleanupPhysics()
+    releaseAnimations()
+
+    if humanoid and humanoid.Parent then
+        humanoid.PlatformStand = false
+        humanoid.AutoRotate = true
+    end
+
+    if upright and hrp and hrp.Parent and humanoid and humanoid.Health > 0 then
+        if currentNormal.Y < 0.7 then
+            local look = hrp.CFrame.LookVector
+            local flat = Vector3.new(look.X, 0, look.Z)
+            if flat.Magnitude < 0.1 then
+                local cam = Workspace.CurrentCamera
+                if cam then
+                    local cl = cam.CFrame.LookVector
+                    flat = Vector3.new(cl.X, 0, cl.Z)
+                end
+            end
+            if flat.Magnitude < 0.01 then flat = Vector3.new(0, 0, -1) end
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + flat.Unit)
+            humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+        else
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
+        end
+    end
+
+    currentNormal = Vector3.yAxis
+    targetNormal = Vector3.yAxis
+    grounded = false
+    updateUI()
+end
+
+shutdown = function()
+    if destroyed then return end
+    destroyed = true
+
+    pcall(disableSpider, true)
+
+    pcall(unbindCamera)
+    pcall(unbindMouse)
+
+    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    UserInputService.MouseIconEnabled = true
+
+    for _, c in ipairs(connections) do 
+        pcall(function() c:Disconnect() end) 
+    end
+    table.clear(connections)
+
+    if diedConn then 
+        pcall(function() diedConn:Disconnect() end) 
+        diedConn = nil 
+    end
+
+    if screenGui then
+        screenGui:Destroy()
+        screenGui = nil
+    end
+
+    if _G.__SpiderWalkShutdown == shutdown then
+        _G.__SpiderWalkShutdown = nil
+    end
+
+    pcall(function()
+        script:Destroy()
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- 13. ИНИЦИАЛИЗАЦИЯ
+--------------------------------------------------------------------------------
+local function onCharacterAdded(newChar)
+    if active then
+        active = false
+        unbindCamera()
+        unbindMouse()
+    end
+    cleanupPhysics()
+    walkTrack, idleTrack, animator, animateScript = nil, nil, nil, nil
+    grounded = false
+    currentNormal = Vector3.yAxis
+    targetNormal = Vector3.yAxis
+
+    character = newChar
+    humanoid = character:WaitForChild("Humanoid")
+    hrp = character:WaitForChild("HumanoidRootPart")
+
+    if diedConn then diedConn:Disconnect() end
+    diedConn = humanoid.Died:Connect(function() disableSpider(false) end)
+
+    updateUI()
+end
+
+_G.__SpiderWalkShutdown = shutdown
+
+pcall(createUI)
+
+table.insert(connections, LocalPlayer.CharacterAdded:Connect(onCharacterAdded))
+if LocalPlayer.Character then task.spawn(onCharacterAdded, LocalPlayer.Character) end
+
+table.insert(connections, UserInputService.JumpRequest:Connect(tryJump))
+
+table.insert(connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == CONFIG.TOGGLE_KEY then
+        if active then disableSpider(true) else enableSpider() end
+    elseif checkResetKeysPressed(input.KeyCode) then
+        resetCursorOnly()
+    end
+end))
+
+table.insert(connections, RunService.Heartbeat:Connect(function(dt)
+    if destroyed then return end
+    pcall(onHeartbeat, dt)
+    statusTimer += dt
+    if statusTimer > 0.2 then
+        statusTimer = 0
+        updateUI()
+    end
+end))
