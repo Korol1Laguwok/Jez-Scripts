@@ -1,0 +1,648 @@
+local Players = game:GetService("Players")
+local Teams = game:GetService("Teams")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
+
+local localPlayer = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+
+local SCRIPT_VERSION = "v2.0"
+
+-- Уведомление
+pcall(function()
+    StarterGui:SetCore("SendNotification", {
+        Title = "Aimbot Updated",
+        Text = "Версия: " .. SCRIPT_VERSION .. " (Hard Lock System)",
+        Duration = 3
+    })
+end)
+
+-- Очистка прошлых GUI
+if playerGui:FindFirstChild("MyCustomGui") then
+    playerGui.MyCustomGui:Destroy()
+end
+
+-- Настройки Аимбота
+local isAimbotEnabled = false
+local isAiming = false
+local wallCheckEnabled = true
+local lockedPlayer = nil
+
+-- Фильтр команд: [Имя Команды] = true (Аимить) / false (Игнорировать)
+local teamTargetState = {}
+
+-- Настройка клавиши активации
+local keybindOptions = {
+    {name = "ПКМ (Правая кнопка)", type = Enum.UserInputType.MouseButton2},
+    {name = "Левый Shift", type = Enum.KeyCode.LeftShift},
+    {name = "Левый Alt", type = Enum.KeyCode.LeftAlt},
+    {name = "Клавиша E", type = Enum.KeyCode.E},
+    {name = "Клавиша Q", type = Enum.KeyCode.Q},
+    {name = "Клавиша F", type = Enum.KeyCode.F}
+}
+local selectedKeybind = Enum.UserInputType.MouseButton2
+
+-- Данные частей тела
+local bodyParts = {
+    {id = "Head", name = "Голова"},
+    {id = "HumanoidRootPart", name = "Туловище"},
+    {id = "RightUpperArm", name = "Правая рука"},
+    {id = "LeftUpperArm", name = "Левая рука"},
+    {id = "RightUpperLeg", name = "Правая нога"},
+    {id = "LeftUpperLeg", name = "Левая нога"}
+}
+local selectedPartId = "Head"
+
+-- Плавность
+local smoothOptions = {
+    {val = 1, name = "Мгновенно"},
+    {val = 0.5, name = "Высокая"},
+    {val = 0.2, name = "Средняя"},
+    {val = 0.08, name = "Низкая"}
+}
+local selectedSmoothVal = 0.2
+
+-- Подсветка цели (Highlight)
+local highlight = Instance.new("Highlight")
+highlight.Name = "AimbotHighlight"
+highlight.FillColor = Color3.fromRGB(255, 40, 40)
+highlight.FillTransparency = 0.4
+highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+highlight.OutlineTransparency = 0
+highlight.Enabled = false
+highlight.Parent = game:GetService("CoreGui")
+
+-- ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MyCustomGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+-- Главное окно
+local defaultFrameSize = UDim2.new(0, 290, 0, 420)
+local defaultFramePos = UDim2.new(1, -310, 0.5, -210)
+
+local frame = Instance.new("Frame")
+frame.Name = "MainWindow"
+frame.Size = defaultFrameSize
+frame.Position = defaultFramePos
+frame.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.ClipsDescendants = true
+frame.Parent = screenGui
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 10)
+frameCorner.Parent = frame
+
+local frameStroke = Instance.new("UIStroke")
+frameStroke.Color = Color3.fromRGB(45, 45, 55)
+frameStroke.Thickness = 1.5
+frameStroke.Parent = frame
+
+-- Логика скрытия/открытия окна с анимацией
+local isMenuVisible = true
+local isAnimating = false
+
+local function toggleMenuVisibility()
+    if isAnimating then return end
+    isAnimating = true
+
+    if isMenuVisible then
+        local hideTween = TweenService:Create(frame, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 0, 0, 0),
+            Position = UDim2.new(frame.Position.X.Scale, frame.Position.X.Offset + 145, frame.Position.Y.Scale, frame.Position.Y.Offset + 210),
+            BackgroundTransparency = 1
+        })
+        hideTween:Play()
+        hideTween.Completed:Wait()
+        frame.Visible = false
+        isMenuVisible = false
+    else
+        frame.Visible = true
+        local showTween = TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = defaultFrameSize,
+            Position = defaultFramePos,
+            BackgroundTransparency = 0
+        })
+        showTween:Play()
+        showTween.Completed:Wait()
+        isMenuVisible = true
+    end
+
+    isAnimating = false
+end
+
+-- Перетаскивание окна
+local dragging, dragInput, dragStart, startPos
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        defaultFramePos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        frame.Position = defaultFramePos
+    end
+end)
+
+-- Заголовок
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -70, 0, 40)
+title.Position = UDim2.new(0, 12, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "Aimbot Menu " .. SCRIPT_VERSION
+title.TextColor3 = Color3.fromRGB(240, 240, 245)
+title.TextSize = 14
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Font = Enum.Font.GothamBold
+title.Parent = frame
+
+-- Кнопка сворачивания (Минус)
+local minimizeButton = Instance.new("TextButton")
+minimizeButton.Size = UDim2.new(0, 26, 0, 26)
+minimizeButton.Position = UDim2.new(1, -62, 0, 7)
+minimizeButton.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+minimizeButton.BorderSizePixel = 0
+minimizeButton.Text = "-"
+minimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeButton.TextSize = 18
+minimizeButton.Font = Enum.Font.GothamBold
+minimizeButton.AutoButtonColor = false
+minimizeButton.Parent = frame
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 6)
+minCorner.Parent = minimizeButton
+
+minimizeButton.MouseButton1Click:Connect(toggleMenuVisibility)
+
+-- Кнопка закрытия (Крестик)
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 26, 0, 26)
+closeButton.Position = UDim2.new(1, -32, 0, 7)
+closeButton.BackgroundColor3 = Color3.fromRGB(215, 45, 55)
+closeButton.BorderSizePixel = 0
+closeButton.Text = ""
+closeButton.AutoButtonColor = false
+closeButton.Parent = frame
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeButton
+
+local line1 = Instance.new("Frame")
+line1.Size = UDim2.new(0, 12, 0, 2)
+line1.Position = UDim2.new(0.5, 0, 0.5, 0)
+line1.AnchorPoint = Vector2.new(0.5, 0.5)
+line1.Rotation = 45
+line1.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+line1.BorderSizePixel = 0
+line1.Parent = closeButton
+
+local line2 = Instance.new("Frame")
+line2.Size = UDim2.new(0, 12, 0, 2)
+line2.Position = UDim2.new(0.5, 0, 0.5, 0)
+line2.AnchorPoint = Vector2.new(0.5, 0.5)
+line2.Rotation = -45
+line2.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+line2.BorderSizePixel = 0
+line2.Parent = closeButton
+
+-- Вспомогательные функции UI
+local function createButton(yOffset, defaultText, zIndex)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 260, 0, 32)
+    btn.Position = UDim2.new(0.5, -130, 0, yOffset)
+    btn.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
+    btn.BorderSizePixel = 0
+    btn.Text = defaultText
+    btn.TextColor3 = Color3.fromRGB(230, 230, 240)
+    btn.TextSize = 11
+    btn.Font = Enum.Font.GothamMedium
+    btn.ZIndex = zIndex or 2
+    btn.AutoButtonColor = false
+    btn.Parent = frame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(50, 50, 62)
+    stroke.Thickness = 1
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = btn
+
+    return btn
+end
+
+local function createDropdownFrame(yOffset, zIndex)
+    local drop = Instance.new("Frame")
+    drop.Size = UDim2.new(0, 260, 0, 0)
+    drop.Position = UDim2.new(0.5, -130, 0, yOffset)
+    drop.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+    drop.BorderSizePixel = 0
+    drop.ClipsDescendants = true
+    drop.ZIndex = zIndex
+    drop.Parent = frame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = drop
+
+    local list = Instance.new("UIListLayout")
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    list.Parent = drop
+
+    return drop
+end
+
+-- Элементы UI
+local toggleButton = createButton(42, "Аимбот: ВЫКЛ", 2)
+toggleButton.Name = "ToggleButton"
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 110, 210)
+
+local keybindButton = createButton(80, "Клавиша: ПКМ ▼", 9)
+local keybindDropdown = createDropdownFrame(114, 10)
+
+local smoothButton = createButton(118, "Плавность: Средняя ▼", 7)
+local smoothDropdown = createDropdownFrame(152, 8)
+
+local wallButton = createButton(156, "Стена: НЕ НАВОДИТЬСЯ ▼", 5)
+local wallDropdown = createDropdownFrame(190, 6)
+
+local teamButton = createButton(194, "Анализатор команд ▼", 3)
+local teamDropdown = createDropdownFrame(228, 4)
+
+local partButton = createButton(232, "Часть тела: Голова ▼", 1)
+local partDropdown = createDropdownFrame(266, 2)
+
+-- Окно списка команд (ScrollingFrame)
+local teamScroll = Instance.new("ScrollingFrame")
+teamScroll.Size = UDim2.new(1, 0, 1, 0)
+teamScroll.BackgroundTransparency = 1
+teamScroll.BorderSizePixel = 0
+teamScroll.ScrollBarThickness = 4
+teamScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+teamScroll.ZIndex = 5
+teamScroll.Parent = teamDropdown
+
+local teamListLayout = Instance.new("UIListLayout")
+teamListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+teamListLayout.Parent = teamScroll
+
+teamListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    teamScroll.CanvasSize = UDim2.new(0, 0, 0, teamListLayout.AbsoluteContentSize.Y)
+end)
+
+-- Обновление списка команд в GUI
+local function refreshTeamList()
+    for _, child in ipairs(teamScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    local foundTeams = Teams:GetTeams()
+    
+    if #foundTeams == 0 then
+        local noTeamsLabel = Instance.new("TextLabel")
+        noTeamsLabel.Size = UDim2.new(1, 0, 0, 30)
+        noTeamsLabel.BackgroundTransparency = 1
+        noTeamsLabel.Text = "Команды не найдены"
+        noTeamsLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+        noTeamsLabel.TextSize = 11
+        noTeamsLabel.Font = Enum.Font.Gotham
+        noTeamsLabel.ZIndex = 5
+        noTeamsLabel.Parent = teamScroll
+        return
+    end
+
+    for _, team in ipairs(foundTeams) do
+        if teamTargetState[team.Name] == nil then
+            teamTargetState[team.Name] = (team ~= localPlayer.Team)
+        end
+
+        local isTargeting = teamTargetState[team.Name]
+
+        local teamRow = Instance.new("TextButton")
+        teamRow.Size = UDim2.new(1, 0, 0, 26)
+        teamRow.BackgroundColor3 = Color3.fromRGB(34, 34, 42)
+        teamRow.BackgroundTransparency = 0.5
+        teamRow.BorderSizePixel = 0
+        teamRow.Text = (isTargeting and " [ ✔ ]  " or " [ ✖ ]  ") .. team.Name
+        teamRow.TextColor3 = isTargeting and Color3.fromRGB(80, 220, 120) or Color3.fromRGB(240, 80, 80)
+        teamRow.TextSize = 11
+        teamRow.TextXAlignment = Enum.TextXAlignment.Left
+        teamRow.Font = Enum.Font.GothamMedium
+        teamRow.ZIndex = 5
+        teamRow.Parent = teamScroll
+
+        teamRow.MouseButton1Click:Connect(function()
+            teamTargetState[team.Name] = not teamTargetState[team.Name]
+            local updatedState = teamTargetState[team.Name]
+            teamRow.Text = (updatedState and " [ ✔ ]  " or " [ ✖ ]  ") .. team.Name
+            teamRow.TextColor3 = updatedState and Color3.fromRGB(80, 220, 120) or Color3.fromRGB(240, 80, 80)
+        end)
+    end
+end
+
+Teams.ChildAdded:Connect(refreshTeamList)
+Teams.ChildRemoved:Connect(refreshTeamList)
+refreshTeamList()
+
+-- Заполнение клавиш
+for _, optData in ipairs(keybindOptions) do
+    local opt = Instance.new("TextButton")
+    opt.Size = UDim2.new(1, 0, 0, 24)
+    opt.BackgroundTransparency = 1
+    opt.Text = optData.name
+    opt.TextColor3 = Color3.fromRGB(210, 210, 225)
+    opt.TextSize = 11
+    opt.Font = Enum.Font.Gotham
+    opt.ZIndex = 11
+    opt.Parent = keybindDropdown
+
+    opt.MouseButton1Click:Connect(function()
+        selectedKeybind = optData.type
+        keybindButton.Text = "Клавиша: " .. optData.name .. " ▼"
+        TweenService:Create(keybindDropdown, TweenInfo.new(0.15), {Size = UDim2.new(0, 260, 0, 0)}):Play()
+    end)
+end
+
+-- Заполнение плавности
+for _, optData in ipairs(smoothOptions) do
+    local opt = Instance.new("TextButton")
+    opt.Size = UDim2.new(1, 0, 0, 24)
+    opt.BackgroundTransparency = 1
+    opt.Text = optData.name
+    opt.TextColor3 = Color3.fromRGB(210, 210, 225)
+    opt.TextSize = 11
+    opt.Font = Enum.Font.Gotham
+    opt.ZIndex = 9
+    opt.Parent = smoothDropdown
+
+    opt.MouseButton1Click:Connect(function()
+        selectedSmoothVal = optData.val
+        smoothButton.Text = "Плавность: " .. optData.name .. " ▼"
+        TweenService:Create(smoothDropdown, TweenInfo.new(0.15), {Size = UDim2.new(0, 260, 0, 0)}):Play()
+    end)
+end
+
+-- Заполнение стен
+local function addWallOpt(text, val)
+    local opt = Instance.new("TextButton")
+    opt.Size = UDim2.new(1, 0, 0, 24)
+    opt.BackgroundTransparency = 1
+    opt.Text = text
+    opt.TextColor3 = Color3.fromRGB(210, 210, 225)
+    opt.TextSize = 11
+    opt.Font = Enum.Font.Gotham
+    opt.ZIndex = 7
+    opt.Parent = wallDropdown
+
+    opt.MouseButton1Click:Connect(function()
+        wallCheckEnabled = val
+        wallButton.Text = "Стена: " .. (val and "НЕ НАВОДИТЬСЯ" or "СКВОЗЬ СТЕНЫ") .. " ▼"
+        TweenService:Create(wallDropdown, TweenInfo.new(0.15), {Size = UDim2.new(0, 260, 0, 0)}):Play()
+    end)
+end
+addWallOpt("Стена: НЕ НАВОДИТЬСЯ (Проверка стен)", true)
+addWallOpt("Стена: СКВОЗЬ СТЕНЫ (Игнорировать стены)", false)
+
+-- Заполнение частей тела
+for _, partData in ipairs(bodyParts) do
+    local opt = Instance.new("TextButton")
+    opt.Size = UDim2.new(1, 0, 0, 24)
+    opt.BackgroundTransparency = 1
+    opt.Text = partData.name
+    opt.TextColor3 = Color3.fromRGB(210, 210, 225)
+    opt.TextSize = 11
+    opt.Font = Enum.Font.Gotham
+    opt.ZIndex = 3
+    opt.Parent = partDropdown
+
+    opt.MouseButton1Click:Connect(function()
+        selectedPartId = partData.id
+        partButton.Text = "Часть тела: " .. partData.name .. " ▼"
+        TweenService:Create(partDropdown, TweenInfo.new(0.15), {Size = UDim2.new(0, 260, 0, 0)}):Play()
+    end)
+end
+
+-- Переключение выпавших меню
+local openDropdown = nil
+local function toggleDropdown(targetDrop, targetHeight)
+    if openDropdown and openDropdown ~= targetDrop then
+        TweenService:Create(openDropdown, TweenInfo.new(0.15), {Size = UDim2.new(0, 260, 0, 0)}):Play()
+    end
+
+    if targetDrop.Size.Y.Offset > 0 then
+        TweenService:Create(targetDrop, TweenInfo.new(0.15), {Size = UDim2.new(0, 260, 0, 0)}):Play()
+        openDropdown = nil
+    else
+        TweenService:Create(targetDrop, TweenInfo.new(0.15), {Size = UDim2.new(0, 260, 0, targetHeight)}):Play()
+        openDropdown = targetDrop
+    end
+end
+
+keybindButton.MouseButton1Click:Connect(function() toggleDropdown(keybindDropdown, 144) end)
+smoothButton.MouseButton1Click:Connect(function() toggleDropdown(smoothDropdown, 96) end)
+wallButton.MouseButton1Click:Connect(function() toggleDropdown(wallDropdown, 48) end)
+teamButton.MouseButton1Click:Connect(function() toggleDropdown(teamDropdown, 110) end)
+partButton.MouseButton1Click:Connect(function() toggleDropdown(partDropdown, 144) end)
+
+-- Переключение статуса Аимбота
+local function setAimbotState(state)
+    isAimbotEnabled = state
+    if isAimbotEnabled then
+        toggleButton.Text = "Аимбот: ВКЛ"
+        TweenService:Create(toggleButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(35, 155, 75)}):Play()
+    else
+        toggleButton.Text = "Аимбот: ВЫКЛ"
+        TweenService:Create(toggleButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 110, 210)}):Play()
+        highlight.Enabled = false
+        lockedPlayer = nil
+    end
+end
+
+toggleButton.MouseButton1Click:Connect(function()
+    setAimbotState(not isAimbotEnabled)
+end)
+
+closeButton.MouseButton1Click:Connect(function()
+    frame.Visible = false
+    setAimbotState(false)
+end)
+
+-- Проверка видимости
+local function isPartVisible(targetPart)
+    if not wallCheckEnabled then 
+        return true 
+    end
+
+    local origin = camera.CFrame.Position
+    local destination = targetPart.Position
+    local direction = destination - origin
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+    local filterList = {camera}
+    if localPlayer.Character then
+        table.insert(filterList, localPlayer.Character)
+    end
+    raycastParams.FilterDescendantsInstances = filterList
+
+    local result = workspace:Raycast(origin, direction, raycastParams)
+    
+    if not result then
+        return true
+    end
+
+    if result.Instance:IsDescendantOf(targetPart.Parent) then
+        return true
+    end
+
+    return false
+end
+
+-- Обработка клавиш
+local function checkInputMatch(input)
+    if selectedKeybind.EnumType == Enum.UserInputType then
+        return input.UserInputType == selectedKeybind
+    elseif selectedKeybind.EnumType == Enum.KeyCode then
+        return input.KeyCode == selectedKeybind
+    end
+    return false
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.RightAlt then
+        toggleMenuVisibility()
+        return
+    end
+
+    if gameProcessed then return end
+    if checkInputMatch(input) then
+        isAiming = true
+    end
+end)
+
+-- При отжатии клавиши сбрасывается выбранная цель
+UserInputService.InputEnded:Connect(function(input)
+    if checkInputMatch(input) then
+        isAiming = false
+        lockedPlayer = nil
+        highlight.Enabled = false
+    end
+end)
+
+-- Проверка команд
+local function isTeamTargetable(player)
+    if player.Team then
+        local state = teamTargetState[player.Team.Name]
+        if state ~= nil then
+            return state
+        end
+    end
+    return player.Team ~= localPlayer.Team
+end
+
+-- Поиск первой ближайшей цели
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local mousePos = UserInputService:GetMouseLocation()
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            
+            if not isTeamTargetable(player) then
+                continue
+            end
+
+            local targetPart = player.Character:FindFirstChild(selectedPartId) or player.Character:FindFirstChild("HumanoidRootPart")
+
+            if targetPart then
+                local screenPos, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+                if onScreen then
+                    if wallCheckEnabled and not isPartVisible(targetPart) then
+                        continue
+                    end
+
+                    local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                    if distance < shortestDistance then
+                        shortestDistance = distance
+                        closestPlayer = player
+                    end
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- Проверка жива ли выбранная цель
+local function isTargetValid(player)
+    if player and player.Parent and player.Character and player.Character:FindFirstChild("Humanoid") then
+        return player.Character.Humanoid.Health > 0
+    end
+    return false
+end
+
+-- Главный цикл
+RunService.RenderStepped:Connect(function()
+    if isAimbotEnabled and isAiming then
+        -- Если цели еще нет или текущая цель умерла/вышла — ищем новую
+        if not isTargetValid(lockedPlayer) then
+            lockedPlayer = getClosestPlayer()
+        end
+
+        if isTargetValid(lockedPlayer) then
+            local targetPart = lockedPlayer.Character:FindFirstChild(selectedPartId) or lockedPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+            if targetPart then
+                -- Если цель перекрыта стеной, наводка приостанавливается, но цель НЕ меняется
+                if wallCheckEnabled and not isPartVisible(targetPart) then
+                    highlight.Enabled = false
+                    return
+                end
+
+                highlight.Adornee = lockedPlayer.Character
+                highlight.Enabled = true
+
+                local targetCFrame = CFrame.new(camera.CFrame.Position, targetPart.Position)
+                camera.CFrame = camera.CFrame:Lerp(targetCFrame, selectedSmoothVal)
+            else
+                highlight.Enabled = false
+            end
+        else
+            lockedPlayer = nil
+            highlight.Enabled = false
+        end
+    else
+        highlight.Enabled = false
+    end
+end)
