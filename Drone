@@ -1,0 +1,1085 @@
+-- ==========================================================================--
+--      J-PROJECT | JEZ DRONE SPY SYSTEM v1.2 (HYPER SPEED EDITION)         --
+-- ==========================================================================--
+
+local UI_NAME = "J_DroneReconSystem_UI"
+
+-- ===== ОЧИСТКА СТАРЫХ КОПИЙ =====
+local function CleanUp()
+    local coreGui = game:GetService("CoreGui")
+    local lp = game:GetService("Players").LocalPlayer
+    
+    for _, child in pairs(coreGui:GetChildren()) do
+        if child.Name == UI_NAME then child:Destroy() end
+    end
+    if lp and lp:FindFirstChild("PlayerGui") then
+        for _, child in pairs(lp.PlayerGui:GetChildren()) do
+            if child.Name == UI_NAME then child:Destroy() end
+        end
+    end
+    if gethui then
+        for _, child in pairs(gethui():GetChildren()) do
+            if child.Name == UI_NAME then child:Destroy() end
+        end
+    end
+end
+CleanUp()
+
+-- ===== СЕРВИСЫ ROBLOX =====
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ===== СОСТОЯНИЕ СИСТЕМЫ =====
+local isScriptActive = true
+local currentLanguage = "RU"
+local maxDrones = 10
+local activeDrones = {}
+local currentControllingDrone = nil
+
+-- Глобальная регулировка скорости (в км/ч) — Максимум 500 км/ч!
+local droneMaxSpeedKmh = 100 
+local MAX_SPEED_LIMIT = 500
+
+-- ===== ЛОКАЛИЗАЦИЯ =====
+local Localizations = {
+    RU = {
+        Title = "   JEZ Drone Hub v1.2",
+        Author = "by Jezafes",
+        SpawnBtn = "➕ Запустить дрона [E]",
+        DroneListTitle = "📹 Список Дронов (Макс. 10)",
+        ActiveCount = "Активных дронов: ",
+        SpeedSliderTitle = "🚀 Макс. скорость (1 - 500 км/ч):",
+        ControlsInfo = "⚙️ ИНСТРУКЦИЯ И УПРАВЛЕНИЕ (v1.2):\n\n• E — Запустить дрон\n• WASD — Полет дрона в воздухе\n• Space / Shift — Подъем / Спуск\n• ПКМ — Свободный обзор\n• L — Вкл/Выкл прожектор\n• F — Зафиксировать позицию и вернуться к игроку",
+        ViewBtn = "👁️ Вход",
+        FlashBtn = "🔦 Фонарь",
+        DeleteBtn = "💥 Взрыв",
+        RenameBtn = "✏️ Имя",
+        PinBtn = "📌",
+        ReturnCam = "↩️ Вернуть камеру",
+        DroneDefaultName = "Дрон #",
+        MaxReached = "Лимит дронов достигнут (10/10)!",
+        InFlightError = "Сначала зафиксируйте текущий дрон [F]!"
+    },
+    EN = {
+        Title = "   JEZ Drone Hub v1.2",
+        Author = "by Jezafes",
+        SpawnBtn = "➕ Launch Drone [E]",
+        DroneListTitle = "📹 Drone List (Max 10)",
+        ActiveCount = "Active Drones: ",
+        SpeedSliderTitle = "🚀 Max Speed (1 - 500 km/h):",
+        ControlsInfo = "⚙️ GUIDELINES & CONTROLS (v1.2):\n\n• E — Launch drone\n• WASD — Move drone in air\n• Space / Shift — Ascend / Descend\n• RMB — Mouse look\n• L — Toggle Light\n• F — Lock position & switch to player",
+        ViewBtn = "👁️ View",
+        FlashBtn = "🔦 Light",
+        DeleteBtn = "💥 Explode",
+        RenameBtn = "✏️ Name",
+        PinBtn = "📌",
+        ReturnCam = "↩️ Reset Camera",
+        DroneDefaultName = "Drone #",
+        MaxReached = "Max drone limit reached (10/10)!",
+        InFlightError = "Lock current drone first [F]!"
+    }
+}
+
+local function L(key)
+    local dict = Localizations[currentLanguage]
+    return (dict and dict[key]) or key
+end
+
+-- ===== ПАЛИТРА ОФОРМЛЕНИЯ =====
+local Theme = {
+    Black = Color3.fromRGB(12, 12, 14),
+    Dark  = Color3.fromRGB(20, 20, 24),
+    Card  = Color3.fromRGB(26, 26, 32),
+    Grey  = Color3.fromRGB(45, 45, 52),
+    Light = Color3.fromRGB(160, 160, 175),
+    White = Color3.fromRGB(250, 250, 250),
+    Accent = Color3.fromRGB(255, 195, 45),
+    Red   = Color3.fromRGB(230, 60, 60),
+    Green = Color3.fromRGB(60, 225, 100)
+}
+
+-- ===== СОЗДАНИЕ GUI =====
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = UI_NAME
+ScreenGui.ResetOnSpawn = false
+
+if syn and syn.protect_gui then
+    syn.protect_gui(ScreenGui)
+    ScreenGui.Parent = game:GetService("CoreGui")
+elseif gethui then
+    ScreenGui.Parent = gethui()
+else
+    pcall(function() ScreenGui.Parent = game:GetService("CoreGui") end)
+    if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+end
+
+local function tween(object, info, properties)
+    local anim = TweenService:Create(object, info, properties)
+    anim:Play()
+    return anim
+end
+
+-- ===== АДАПТИВНОЕ ПЕРЕТАСКИВАНИЕ С ИСКЛЮЧЕНИЕМ ДЛЯ ПОЛЗУНКА =====
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            local mousePos = input.Position
+            local speedCard = frame:FindFirstChild("BodyContainer") and frame.BodyContainer:FindFirstChild("SpeedControlCard")
+            if speedCard then
+                local cardPos = speedCard.AbsolutePosition
+                local cardSize = speedCard.AbsoluteSize
+                if mousePos.X >= cardPos.X and mousePos.X <= cardPos.X + cardSize.X and
+                   mousePos.Y >= cardPos.Y and mousePos.Y <= cardPos.Y + cardSize.Y then
+                    return 
+                end
+            end
+
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            
+            local endConn
+            endConn = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then 
+                    dragging = false 
+                    if endConn then endConn:Disconnect() end
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    RunService.RenderStepped:Connect(function()
+        if dragging and dragInput and isScriptActive then
+            local delta = dragInput.Position - dragStart
+            local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            tween(frame, TweenInfo.new(0.08, Enum.EasingStyle.Sine), {Position = newPos})
+        end
+    end)
+end
+
+-- ===== ОСНОВНОЕ ОКНО =====
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 330, 0, 490)
+MainFrame.Position = UDim2.new(0.02, 0, 0.15, 0)
+MainFrame.BackgroundColor3 = Theme.Black
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = false
+MainFrame.ZIndex = 1
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
+
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Thickness = 1.5
+MainStroke.Color = Theme.Grey
+
+local MainScale = Instance.new("UIScale", MainFrame)
+MainScale.Scale = 1
+makeDraggable(MainFrame)
+
+-- ===== АНТЕННА =====
+local AntennaPole = Instance.new("Frame", MainFrame)
+AntennaPole.Size = UDim2.new(0, 4, 0, 32)
+AntennaPole.Position = UDim2.new(0, 18, 0, -30)
+AntennaPole.BackgroundColor3 = Theme.Grey
+AntennaPole.BorderSizePixel = 0
+AntennaPole.ZIndex = 0
+Instance.new("UICorner", AntennaPole).CornerRadius = UDim.new(0, 2)
+
+local AntennaTip = Instance.new("Frame", AntennaPole)
+AntennaTip.Size = UDim2.new(0, 12, 0, 12)
+AntennaTip.Position = UDim2.new(0.5, -6, 0, -8)
+AntennaTip.BackgroundColor3 = Theme.Red
+AntennaTip.BorderSizePixel = 0
+AntennaTip.ZIndex = 1
+Instance.new("UICorner", AntennaTip).CornerRadius = UDim.new(1, 0)
+
+task.spawn(function()
+    while isScriptActive do
+        tween(AntennaTip, TweenInfo.new(0.6), {BackgroundColor3 = Color3.fromRGB(255, 40, 40)}).Completed:Wait()
+        tween(AntennaTip, TweenInfo.new(0.6), {BackgroundColor3 = Color3.fromRGB(100, 20, 20)}).Completed:Wait()
+    end
+end)
+
+-- ===== HEADER =====
+local Header = Instance.new("Frame", MainFrame)
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 46)
+Header.BackgroundColor3 = Theme.Dark
+Header.BorderSizePixel = 0
+Header.ZIndex = 10
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 14)
+
+local HeaderTitle = Instance.new("TextLabel", Header)
+HeaderTitle.Size = UDim2.new(1, -110, 0, 24)
+HeaderTitle.Position = UDim2.new(0, 14, 0, 4)
+HeaderTitle.BackgroundTransparency = 1
+HeaderTitle.Text = L("Title")
+HeaderTitle.Font = Enum.Font.GothamBold
+HeaderTitle.TextSize = 12
+HeaderTitle.TextColor3 = Theme.White
+HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+HeaderTitle.ZIndex = 11
+
+local AuthorLabel = Instance.new("TextLabel", Header)
+AuthorLabel.Size = UDim2.new(1, -110, 0, 16)
+AuthorLabel.Position = UDim2.new(0, 14, 0, 24)
+AuthorLabel.BackgroundTransparency = 1
+AuthorLabel.Text = L("Author")
+AuthorLabel.Font = Enum.Font.GothamMedium
+AuthorLabel.TextSize = 10
+AuthorLabel.TextColor3 = Theme.Accent
+AuthorLabel.TextXAlignment = Enum.TextXAlignment.Left
+AuthorLabel.ZIndex = 11
+
+local LangBtn = Instance.new("TextButton", Header)
+LangBtn.Size = UDim2.new(0, 28, 0, 28)
+LangBtn.Position = UDim2.new(1, -72, 0.5, -14)
+LangBtn.BackgroundColor3 = Theme.Grey
+LangBtn.BackgroundTransparency = 0.4
+LangBtn.Text = currentLanguage
+LangBtn.Font = Enum.Font.GothamBold
+LangBtn.TextSize = 11
+LangBtn.TextColor3 = Theme.White
+LangBtn.ZIndex = 11
+Instance.new("UICorner", LangBtn).CornerRadius = UDim.new(1, 0)
+
+local CloseBtn = Instance.new("TextButton", Header)
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -36, 0.5, -14)
+CloseBtn.BackgroundColor3 = Theme.Grey
+CloseBtn.BackgroundTransparency = 0.4
+CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 13
+CloseBtn.TextColor3 = Theme.White
+CloseBtn.ZIndex = 11
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(1, 0)
+
+-- ===== БОКОВАЯ ПАНЕЛЬ С СПИСКОМ ДРОНОВ =====
+local RightPanel = Instance.new("Frame", ScreenGui)
+RightPanel.Name = "DroneFeedsPanel"
+RightPanel.Size = UDim2.new(0, 290, 0, 490)
+RightPanel.Position = UDim2.new(1, -300, 0.15, 0)
+RightPanel.BackgroundColor3 = Theme.Black
+RightPanel.BorderSizePixel = 0
+RightPanel.ZIndex = 5
+Instance.new("UICorner", RightPanel).CornerRadius = UDim.new(0, 14)
+
+local RightStroke = Instance.new("UIStroke", RightPanel)
+RightStroke.Thickness = 1.5
+RightStroke.Color = Theme.Grey
+makeDraggable(RightPanel)
+
+local RightHeader = Instance.new("Frame", RightPanel)
+RightHeader.Size = UDim2.new(1, 0, 0, 40)
+RightHeader.BackgroundColor3 = Theme.Dark
+RightHeader.BorderSizePixel = 0
+RightHeader.ZIndex = 6
+Instance.new("UICorner", RightHeader).CornerRadius = UDim.new(0, 14)
+
+local RightTitle = Instance.new("TextLabel", RightHeader)
+RightTitle.Size = UDim2.new(1, -20, 1, 0)
+RightTitle.Position = UDim2.new(0, 10, 0, 0)
+RightTitle.BackgroundTransparency = 1
+RightTitle.Text = L("DroneListTitle")
+RightTitle.Font = Enum.Font.GothamBold
+RightTitle.TextSize = 11
+RightTitle.TextColor3 = Theme.Accent
+RightTitle.TextXAlignment = Enum.TextXAlignment.Left
+RightTitle.ZIndex = 7
+
+local FeedScroll = Instance.new("ScrollingFrame", RightPanel)
+FeedScroll.Size = UDim2.new(1, -12, 1, -50)
+FeedScroll.Position = UDim2.new(0, 6, 0, 44)
+FeedScroll.BackgroundTransparency = 1
+FeedScroll.BorderSizePixel = 0
+FeedScroll.ScrollBarThickness = 3
+FeedScroll.ScrollBarImageColor3 = Theme.Grey
+FeedScroll.CanvasSize = UDim2.new(0,0,0,0)
+FeedScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+FeedScroll.ZIndex = 6
+
+local FeedLayout = Instance.new("UIListLayout", FeedScroll)
+FeedLayout.SortOrder = Enum.SortOrder.LayoutOrder
+FeedLayout.Padding = UDim.new(0, 8)
+
+-- ===== СПИДОМЕТР СКОРОСТИ ПОЛЕТА =====
+local SpeedHud = Instance.new("Frame", ScreenGui)
+SpeedHud.Name = "SpeedHud"
+SpeedHud.Size = UDim2.new(0, 160, 0, 38)
+SpeedHud.Position = UDim2.new(0.5, -80, 0.85, 0)
+SpeedHud.BackgroundColor3 = Theme.Black
+SpeedHud.Visible = false
+SpeedHud.ZIndex = 50
+Instance.new("UICorner", SpeedHud).CornerRadius = UDim.new(0, 10)
+
+local SpeedStroke = Instance.new("UIStroke", SpeedHud)
+SpeedStroke.Thickness = 1.5
+SpeedStroke.Color = Theme.Accent
+
+local SpeedText = Instance.new("TextLabel", SpeedHud)
+SpeedText.Size = UDim2.new(1, 0, 1, 0)
+SpeedText.BackgroundTransparency = 1
+SpeedText.Text = "⚡ 0.0 km/h"
+SpeedText.Font = Enum.Font.GothamBold
+SpeedText.TextSize = 13
+SpeedText.TextColor3 = Theme.White
+SpeedText.ZIndex = 51
+
+-- ===== ТЕЛО ОСНОВНОГО ИНТЕРФЕЙСА =====
+local BodyContainer = Instance.new("Frame", MainFrame)
+BodyContainer.Name = "BodyContainer"
+BodyContainer.Size = UDim2.new(1, -20, 1, -56)
+BodyContainer.Position = UDim2.new(0, 10, 0, 50)
+BodyContainer.BackgroundTransparency = 1
+BodyContainer.ZIndex = 2
+
+local SpawnDroneBtn = Instance.new("TextButton", BodyContainer)
+SpawnDroneBtn.Size = UDim2.new(1, 0, 0, 36)
+SpawnDroneBtn.Position = UDim2.new(0, 0, 0, 6)
+SpawnDroneBtn.BackgroundColor3 = Theme.Dark
+SpawnDroneBtn.Text = L("SpawnBtn")
+SpawnDroneBtn.Font = Enum.Font.GothamBold
+SpawnDroneBtn.TextSize = 12
+SpawnDroneBtn.TextColor3 = Theme.White
+SpawnDroneBtn.ZIndex = 3
+Instance.new("UICorner", SpawnDroneBtn).CornerRadius = UDim.new(0, 8)
+
+-- Блок управления максимальной скоростью ДО 500 КМ/Ч!
+local SpeedControlCard = Instance.new("Frame", BodyContainer)
+SpeedControlCard.Name = "SpeedControlCard"
+SpeedControlCard.Size = UDim2.new(1, 0, 0, 56)
+SpeedControlCard.Position = UDim2.new(0, 0, 0, 48)
+SpeedControlCard.BackgroundColor3 = Theme.Card
+SpeedControlCard.BorderSizePixel = 0
+SpeedControlCard.ZIndex = 3
+Instance.new("UICorner", SpeedControlCard).CornerRadius = UDim.new(0, 8)
+
+local SpeedSliderTitle = Instance.new("TextLabel", SpeedControlCard)
+SpeedSliderTitle.Size = UDim2.new(1, -85, 0, 20)
+SpeedSliderTitle.Position = UDim2.new(0, 10, 0, 4)
+SpeedSliderTitle.BackgroundTransparency = 1
+SpeedSliderTitle.Text = L("SpeedSliderTitle")
+SpeedSliderTitle.Font = Enum.Font.GothamMedium
+SpeedSliderTitle.TextSize = 10
+SpeedSliderTitle.TextColor3 = Theme.Light
+SpeedSliderTitle.TextXAlignment = Enum.TextXAlignment.Left
+SpeedSliderTitle.ZIndex = 4
+
+local SpeedBox = Instance.new("TextBox", SpeedControlCard)
+SpeedBox.Size = UDim2.new(0, 65, 0, 20)
+SpeedBox.Position = UDim2.new(1, -72, 0, 4)
+SpeedBox.BackgroundColor3 = Theme.Dark
+SpeedBox.Text = tostring(droneMaxSpeedKmh) .. " km/h"
+SpeedBox.Font = Enum.Font.GothamBold
+SpeedBox.TextSize = 10
+SpeedBox.TextColor3 = Theme.Accent
+SpeedBox.ZIndex = 4
+Instance.new("UICorner", SpeedBox).CornerRadius = UDim.new(0, 4)
+
+local SliderBar = Instance.new("Frame", SpeedControlCard)
+SliderBar.Name = "SliderBar"
+SliderBar.Size = UDim2.new(1, -20, 0, 8)
+SliderBar.Position = UDim2.new(0, 10, 0, 36)
+SliderBar.BackgroundColor3 = Theme.Dark
+SliderBar.ZIndex = 4
+Instance.new("UICorner", SliderBar).CornerRadius = UDim.new(1, 0)
+
+local SliderFill = Instance.new("Frame", SliderBar)
+SliderFill.Size = UDim2.new((droneMaxSpeedKmh - 1) / (MAX_SPEED_LIMIT - 1), 0, 1, 0)
+SliderFill.BackgroundColor3 = Theme.Accent
+SliderFill.ZIndex = 5
+Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(1, 0)
+
+local SliderKnob = Instance.new("Frame", SliderFill)
+SliderKnob.Size = UDim2.new(0, 14, 0, 14)
+SliderKnob.Position = UDim2.new(1, -7, 0.5, -7)
+SliderKnob.BackgroundColor3 = Theme.White
+SliderKnob.ZIndex = 6
+Instance.new("UICorner", SliderKnob).CornerRadius = UDim.new(1, 0)
+
+local isSliding = false
+
+local function setDroneSpeed(val)
+    val = math.clamp(math.floor(val), 1, MAX_SPEED_LIMIT)
+    droneMaxSpeedKmh = val
+    SpeedBox.Text = tostring(val) .. " km/h"
+    SliderFill.Size = UDim2.new((val - 1) / (MAX_SPEED_LIMIT - 1), 0, 1, 0)
+end
+
+SliderBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isSliding = true
+        local x = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
+        setDroneSpeed(1 + (x * (MAX_SPEED_LIMIT - 1)))
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isSliding = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isSliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local x = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
+        setDroneSpeed(1 + (x * (MAX_SPEED_LIMIT - 1)))
+    end
+end)
+
+SpeedBox.FocusLost:Connect(function()
+    local num = tonumber(SpeedBox.Text:match("%d+"))
+    if num then
+        setDroneSpeed(num)
+    else
+        SpeedBox.Text = tostring(droneMaxSpeedKmh) .. " km/h"
+    end
+end)
+
+local InfoCard = Instance.new("Frame", BodyContainer)
+InfoCard.Size = UDim2.new(1, 0, 0, 270)
+InfoCard.Position = UDim2.new(0, 0, 0, 110)
+InfoCard.BackgroundColor3 = Theme.Card
+InfoCard.BorderSizePixel = 0
+InfoCard.ZIndex = 3
+Instance.new("UICorner", InfoCard).CornerRadius = UDim.new(0, 10)
+
+local ActiveCountLabel = Instance.new("TextLabel", InfoCard)
+ActiveCountLabel.Size = UDim2.new(1, -20, 0, 24)
+ActiveCountLabel.Position = UDim2.new(0, 10, 0, 8)
+ActiveCountLabel.BackgroundTransparency = 1
+ActiveCountLabel.Text = L("ActiveCount") .. "0 / 10"
+ActiveCountLabel.Font = Enum.Font.GothamBold
+ActiveCountLabel.TextSize = 12
+ActiveCountLabel.TextColor3 = Theme.Accent
+ActiveCountLabel.TextXAlignment = Enum.TextXAlignment.Left
+ActiveCountLabel.ZIndex = 4
+
+local InstructionsLabel = Instance.new("TextLabel", InfoCard)
+InstructionsLabel.Size = UDim2.new(1, -20, 0, 220)
+InstructionsLabel.Position = UDim2.new(0, 10, 0, 36)
+InstructionsLabel.BackgroundTransparency = 1
+InstructionsLabel.Text = L("ControlsInfo")
+InstructionsLabel.Font = Enum.Font.Gotham
+InstructionsLabel.TextSize = 10
+InstructionsLabel.TextColor3 = Theme.Light
+InstructionsLabel.TextWrapped = true
+InstructionsLabel.TextXAlignment = Enum.TextXAlignment.Left
+InstructionsLabel.TextYAlignment = Enum.TextYAlignment.Top
+InstructionsLabel.ZIndex = 4
+
+-- ===== РАЗБЛОКИРОВКА / ЗАМОРОЗКА =====
+local function setCharacterMovement(enable)
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        if not enable then
+            hum.WalkSpeed = 0
+            hum.JumpPower = 0
+        else
+            hum.WalkSpeed = 16
+            hum.JumpPower = 50
+        end
+    end
+    if enable then
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        SpeedHud.Visible = false
+    end
+end
+
+-- ===== 3D ДРОН С ФИЗИЧЕСКИМ ФОНАРЕМ СНИЗУ =====
+local function createUnifiedDrone(pos)
+    local model = Instance.new("Model")
+    model.Name = "JEZ_SpyDrone_v12"
+
+    local body = Instance.new("Part")
+    body.Name = "HumanoidRootPart"
+    body.Size = Vector3.new(1.6, 0.4, 1.6)
+    body.CFrame = CFrame.new(pos)
+    body.Material = Enum.Material.SmoothPlastic
+    body.Color = Color3.fromRGB(22, 22, 28)
+    body.CanCollide = false
+    body.Anchored = true
+    body.Parent = model
+
+    local jezPlate = Instance.new("Part")
+    jezPlate.Name = "JEZ_Plate"
+    jezPlate.Size = Vector3.new(1.2, 0.08, 0.8)
+    jezPlate.CFrame = body.CFrame * CFrame.new(0, 0.22, 0)
+    jezPlate.Material = Enum.Material.SmoothPlastic
+    jezPlate.Color = Color3.fromRGB(10, 10, 12)
+    jezPlate.CanCollide = false
+    jezPlate.Anchored = true
+    jezPlate.Parent = model
+
+    local sGui = Instance.new("SurfaceGui", jezPlate)
+    sGui.Face = Enum.NormalId.Top
+    local label = Instance.new("TextLabel", sGui)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = "JEZ"
+    label.Font = Enum.Font.GothamBlack
+    label.TextColor3 = Theme.Accent
+    label.TextScaled = true
+
+    local cameraMount = Instance.new("Part")
+    cameraMount.Name = "CameraMount"
+    cameraMount.Size = Vector3.new(0.5, 0.35, 0.5)
+    cameraMount.CFrame = body.CFrame * CFrame.new(0, -0.2, -0.7)
+    cameraMount.Material = Enum.Material.SmoothPlastic
+    cameraMount.Color = Color3.fromRGB(35, 35, 40)
+    cameraMount.CanCollide = false
+    cameraMount.Anchored = true
+    cameraMount.Parent = model
+
+    local lampBody = Instance.new("Part")
+    lampBody.Name = "FlashlightBody"
+    lampBody.Size = Vector3.new(0.25, 0.25, 0.4)
+    lampBody.CFrame = cameraMount.CFrame * CFrame.new(0, -0.25, 0)
+    lampBody.Material = Enum.Material.Metal
+    lampBody.Color = Color3.fromRGB(15, 15, 18)
+    lampBody.CanCollide = false
+    lampBody.Anchored = true
+    lampBody.Parent = model
+
+    local lampLens = Instance.new("Part")
+    lampLens.Name = "FlashlightLens"
+    lampLens.Size = Vector3.new(0.2, 0.2, 0.05)
+    lampLens.CFrame = lampBody.CFrame * CFrame.new(0, 0, -0.2)
+    lampLens.Material = Enum.Material.SmoothPlastic
+    lampLens.Color = Color3.fromRGB(80, 80, 80)
+    lampLens.CanCollide = false
+    lampLens.Anchored = true
+    lampLens.Parent = model
+
+    local flashlight = Instance.new("SpotLight", lampLens)
+    flashlight.Name = "DroneFlashlight"
+    flashlight.Face = Enum.NormalId.Front
+    flashlight.Color = Color3.fromRGB(255, 250, 220)
+    flashlight.Range = 80
+    flashlight.Angle = 60
+    flashlight.Brightness = 10
+    flashlight.Enabled = false
+
+    local recDot = Instance.new("Part")
+    recDot.Name = "RecDot"
+    recDot.Size = Vector3.new(0.12, 0.12, 0.05)
+    recDot.CFrame = cameraMount.CFrame * CFrame.new(0.18, 0.1, -0.26)
+    recDot.Material = Enum.Material.Neon
+    recDot.Color = Theme.Red
+    recDot.CanCollide = false
+    recDot.Anchored = true
+    recDot.Parent = model
+
+    local motorSound = Instance.new("Sound")
+    motorSound.Name = "RotorSound"
+    motorSound.SoundId = "rbxassetid://9114223179"
+    motorSound.Volume = 0.8
+    motorSound.Looped = true
+    motorSound.RollOffMaxDistance = 80
+    motorSound.Parent = body
+    motorSound:Play()
+
+    local arms = {}
+    local rotors = {}
+    local offsets = {
+        Vector3.new(1.4, 0.1, 1.4),
+        Vector3.new(-1.4, 0.1, 1.4),
+        Vector3.new(1.4, 0.1, -1.4),
+        Vector3.new(-1.4, 0.1, -1.4)
+    }
+
+    for _, off in ipairs(offsets) do
+        local arm = Instance.new("Part")
+        arm.Size = Vector3.new(0.15, 0.15, off.Magnitude)
+        arm.CFrame = CFrame.lookAt(body.Position, body.Position + off) * CFrame.new(0, 0, -off.Magnitude/2)
+        arm.Material = Enum.Material.SmoothPlastic
+        arm.Color = Color3.fromRGB(15, 15, 18)
+        arm.CanCollide = false
+        arm.Anchored = true
+        arm.Parent = model
+
+        local rotor = Instance.new("Part")
+        rotor.Size = Vector3.new(1.3, 0.03, 0.12)
+        rotor.CFrame = body.CFrame * CFrame.new(off + Vector3.new(0, 0.14, 0))
+        rotor.Material = Enum.Material.SmoothPlastic
+        rotor.Color = Color3.fromRGB(240, 240, 250)
+        rotor.CanCollide = false
+        rotor.Anchored = true
+        rotor.Parent = model
+
+        table.insert(arms, {Part = arm, Offset = off})
+        table.insert(rotors, {Part = rotor, Offset = off})
+    end
+
+    model.PrimaryPart = body
+    model.Parent = workspace
+
+    return model, body, jezPlate, cameraMount, lampBody, lampLens, recDot, flashlight, arms, rotors, motorSound
+end
+
+-- ===== ФОНОЕ ВРАЩЕНИЕ И СИНХРОНИЗАЦИЯ ЧАСТЕЙ =====
+RunService.RenderStepped:Connect(function()
+    if not isScriptActive then return end
+
+    for _, drone in ipairs(activeDrones) do
+        if drone and drone.Model and drone.Model.Parent then
+            local bCF = drone.Part.CFrame
+
+            drone.JezPlate.CFrame = bCF * CFrame.new(0, 0.22, 0)
+            drone.Mount.CFrame = bCF * CFrame.new(0, -0.2, -0.7)
+            drone.LampBody.CFrame = drone.Mount.CFrame * CFrame.new(0, -0.25, 0)
+            drone.LampLens.CFrame = drone.LampBody.CFrame * CFrame.new(0, 0, -0.2)
+            drone.RecDot.CFrame = drone.Mount.CFrame * CFrame.new(0.18, 0.1, -0.26)
+
+            for _, aData in ipairs(drone.Arms) do
+                aData.Part.CFrame = CFrame.lookAt(bCF.Position, bCF.Position + (bCF:VectorToWorldSpace(aData.Offset))) * CFrame.new(0, 0, -aData.Offset.Magnitude/2)
+            end
+
+            for idx, rData in ipairs(drone.Rotors) do
+                local dir = (idx % 2 == 0) and 1 or -1
+                rData.Part.CFrame = bCF * CFrame.new(rData.Offset + Vector3.new(0, 0.14, 0)) * CFrame.Angles(0, math.rad(tick() * 2200 * dir % 360), 0)
+            end
+        end
+    end
+end)
+
+-- ===== СПАВН И СВЕРХБЫСТРОЕ УПРАВЛЕНИЕ =====
+local function spawnDrone()
+    if not isScriptActive then return end
+
+    if currentControllingDrone ~= nil then
+        ActiveCountLabel.Text = L("InFlightError")
+        task.delay(2, function()
+            ActiveCountLabel.Text = L("ActiveCount") .. tostring(#activeDrones) .. " / " .. tostring(maxDrones)
+        end)
+        return
+    end
+
+    if #activeDrones >= maxDrones then
+        ActiveCountLabel.Text = L("MaxReached")
+        task.delay(2, function()
+            ActiveCountLabel.Text = L("ActiveCount") .. tostring(#activeDrones) .. " / " .. tostring(maxDrones)
+        end)
+        return
+    end
+
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    setCharacterMovement(false)
+    SpeedHud.Visible = true
+
+    local spawnPos = hrp.Position + (hrp.CFrame.LookVector * 4) + Vector3.new(0, 3, 0)
+    local droneModel, dronePart, jezPlate, camMount, lampBody, lampLens, recDot, flashlight, arms, rotors, motorSound = createUnifiedDrone(spawnPos)
+
+    local droneData = {
+        Model = droneModel,
+        Part = dronePart,
+        JezPlate = jezPlate,
+        Mount = camMount,
+        LampBody = lampBody,
+        LampLens = lampLens,
+        Light = flashlight,
+        RecDot = recDot,
+        Arms = arms,
+        Rotors = rotors,
+        Sound = motorSound,
+        ID = #activeDrones + 1,
+        CustomName = L("DroneDefaultName") .. tostring(#activeDrones + 1),
+        IsPinned = false
+    }
+
+    table.insert(activeDrones, droneData)
+    currentControllingDrone = droneData
+
+    ActiveCountLabel.Text = L("ActiveCount") .. tostring(#activeDrones) .. " / " .. tostring(maxDrones)
+    Camera.CameraType = Enum.CameraType.Scriptable
+
+    local yaw = 0
+    local pitch = 0
+    local lastPos = dronePart.Position
+    local smoothedKmh = 0
+    local lastSpeedUpdate = os.clock()
+
+    task.spawn(function()
+        while droneData.Model and droneData.Model.Parent do
+            recDot.Transparency = 0
+            task.wait(0.4)
+            recDot.Transparency = 1
+            task.wait(0.4)
+        end
+    end)
+
+    local moveConn
+    moveConn = RunService.RenderStepped:Connect(function(dt)
+        if currentControllingDrone == droneData and droneData.Model and droneData.Model.Parent then
+            
+            -- Вычисление разгона и сглаживания
+            local currentPos = dronePart.Position
+            local dist = (currentPos - lastPos).Magnitude
+            local studsPerSec = dist / dt
+            local rawKmh = studsPerSec * 0.28
+            
+            smoothedKmh = smoothedKmh + (rawKmh - smoothedKmh) * 0.2
+            lastPos = currentPos
+
+            if os.clock() - lastSpeedUpdate >= 0.1 then
+                lastSpeedUpdate = os.clock()
+                SpeedText.Text = string.format("⚡ %.1f km/h", math.clamp(smoothedKmh, 0, droneMaxSpeedKmh))
+            end
+
+            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
+                local delta = UserInputService:GetMouseDelta()
+                yaw = yaw - delta.X * 0.25
+                pitch = math.clamp(pitch - delta.Y * 0.25, -75, 75)
+            else
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+            end
+
+            local rotationCF = CFrame.Angles(0, math.rad(yaw), 0) * CFrame.Angles(math.rad(pitch), 0, 0)
+            dronePart.CFrame = CFrame.new(dronePart.Position) * rotationCF
+
+            local moveVector = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + dronePart.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector - dronePart.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector = moveVector - dronePart.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector = moveVector + dronePart.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVector = moveVector + Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveVector = moveVector - Vector3.new(0, 1, 0) end
+
+            if moveVector.Magnitude > 0 then
+                -- Увеличенный множитель скорости под режим до 500 км/ч
+                local studSpeedMultiplier = (droneMaxSpeedKmh / 0.28)
+                dronePart.Position = dronePart.Position + (moveVector.Unit * studSpeedMultiplier * dt)
+            end
+
+            Camera.CFrame = dronePart.CFrame * CFrame.new(0, -0.1, -0.8)
+        else
+            if moveConn then moveConn:Disconnect() end
+        end
+    end)
+
+    refreshDroneFeedsUI()
+end
+
+-- ===== ФИКЦИЯ ПОЗИЦИИ ПРИ НАЖАТИИ F =====
+local function lockCurrentDrone()
+    currentControllingDrone = nil
+    setCharacterMovement(true)
+
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        Camera.CameraType = Enum.CameraType.Custom
+        Camera.CameraSubject = LocalPlayer.Character.Humanoid
+    end
+end
+
+-- ===== ВЗРЫВ =====
+local function explodeDrone(drone, idx)
+    if drone and drone.Part then
+        local pos = drone.Part.Position
+
+        local exp = Instance.new("Explosion")
+        exp.Position = pos
+        exp.BlastRadius = 10
+        exp.BlastPressure = 0
+        exp.Parent = workspace
+
+        local snd = Instance.new("Sound")
+        snd.SoundId = "rbxassetid://142070127"
+        snd.Volume = 2
+        snd.Parent = SoundService
+        snd:Play()
+        snd.Ended:Connect(function() snd:Destroy() end)
+
+        if currentControllingDrone == drone then
+            lockCurrentDrone()
+        end
+
+        if drone.Model then drone.Model:Destroy() end
+        table.remove(activeDrones, idx)
+        refreshDroneFeedsUI()
+        setCharacterMovement(true)
+        ActiveCountLabel.Text = L("ActiveCount") .. tostring(#activeDrones) .. " / " .. tostring(maxDrones)
+    end
+end
+
+-- КЛАВИШИ УПРАВЛЕНИЯ
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed or not isScriptActive then return end
+    if input.KeyCode == Enum.KeyCode.E then
+        spawnDrone()
+    elseif input.KeyCode == Enum.KeyCode.F then
+        lockCurrentDrone()
+    elseif input.KeyCode == Enum.KeyCode.L then
+        if currentControllingDrone and currentControllingDrone.Light then
+            currentControllingDrone.Light.Enabled = not currentControllingDrone.Light.Enabled
+            currentControllingDrone.LampLens.Color = currentControllingDrone.Light.Enabled and Color3.fromRGB(255, 255, 180) or Color3.fromRGB(80, 80, 80)
+        end
+    end
+end)
+
+-- ===== ОКНО ВВОДА ИМЕНИ =====
+local function promptRename(drone)
+    local promptFrame = Instance.new("Frame", ScreenGui)
+    promptFrame.Name = "RenameModal"
+    promptFrame.Size = UDim2.new(0, 260, 0, 120)
+    promptFrame.Position = UDim2.new(0.5, -130, 0.4, 0)
+    promptFrame.BackgroundColor3 = Theme.Black
+    promptFrame.ZIndex = 200
+    Instance.new("UICorner", promptFrame).CornerRadius = UDim.new(0, 10)
+
+    local stroke = Instance.new("UIStroke", promptFrame)
+    stroke.Thickness = 2
+    stroke.Color = Theme.Accent
+
+    local title = Instance.new("TextLabel", promptFrame)
+    title.Size = UDim2.new(1, -30, 0, 28)
+    title.Position = UDim2.new(0, 10, 0, 4)
+    title.Text = "Имя дрона:"
+    title.TextColor3 = Theme.White
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 12
+    title.BackgroundTransparency = 1
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 201
+
+    local cancelBtn = Instance.new("TextButton", promptFrame)
+    cancelBtn.Size = UDim2.new(0, 22, 0, 22)
+    cancelBtn.Position = UDim2.new(1, -26, 0, 6)
+    cancelBtn.BackgroundColor3 = Theme.Grey
+    cancelBtn.Text = "X"
+    cancelBtn.TextColor3 = Theme.White
+    cancelBtn.Font = Enum.Font.GothamBold
+    cancelBtn.TextSize = 11
+    cancelBtn.ZIndex = 201
+    Instance.new("UICorner", cancelBtn).CornerRadius = UDim.new(1, 0)
+
+    local box = Instance.new("TextBox", promptFrame)
+    box.Size = UDim2.new(0.9, 0, 0, 30)
+    box.Position = UDim2.new(0.05, 0, 0.32, 0)
+    box.BackgroundColor3 = Theme.Dark
+    box.Text = drone.CustomName
+    box.TextColor3 = Theme.Accent
+    box.Font = Enum.Font.GothamBold
+    box.TextSize = 12
+    box.ZIndex = 201
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
+
+    local okBtn = Instance.new("TextButton", promptFrame)
+    okBtn.Size = UDim2.new(0.45, 0, 0, 26)
+    okBtn.Position = UDim2.new(0.275, 0, 0.68, 0)
+    okBtn.BackgroundColor3 = Theme.Grey
+    okBtn.Text = "Сохранить"
+    okBtn.TextColor3 = Theme.White
+    okBtn.Font = Enum.Font.GothamBold
+    okBtn.TextSize = 11
+    okBtn.ZIndex = 201
+    Instance.new("UICorner", okBtn).CornerRadius = UDim.new(0, 6)
+
+    cancelBtn.MouseButton1Click:Connect(function()
+        promptFrame:Destroy()
+    end)
+
+    okBtn.MouseButton1Click:Connect(function()
+        if box.Text ~= "" then
+            drone.CustomName = box.Text
+            refreshDroneFeedsUI()
+        end
+        promptFrame:Destroy()
+    end)
+end
+
+-- ===== ОБНОВЛЕНИЕ СПИСКА ДРОНОВ =====
+function refreshDroneFeedsUI()
+    FeedScroll:ClearAllChildren()
+    local layout = Instance.new("UIListLayout", FeedScroll)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 8)
+
+    table.sort(activeDrones, function(a, b)
+        if a.IsPinned ~= b.IsPinned then
+            return a.IsPinned
+        end
+        return a.ID < b.ID
+    end)
+
+    for idx, drone in ipairs(activeDrones) do
+        local feedCard = Instance.new("Frame", FeedScroll)
+        feedCard.Size = UDim2.new(1, -12, 0, 68)
+        feedCard.BackgroundColor3 = drone.IsPinned and Color3.fromRGB(35, 32, 20) or Theme.Card
+        feedCard.BorderSizePixel = 0
+        feedCard.ZIndex = 7
+        Instance.new("UICorner", feedCard).CornerRadius = UDim.new(0, 8)
+
+        local stroke = Instance.new("UIStroke", feedCard)
+        stroke.Thickness = 1
+        stroke.Color = drone.IsPinned and Theme.Accent or Theme.Grey
+
+        local droneTitle = Instance.new("TextLabel", feedCard)
+        droneTitle.Size = UDim2.new(1, -40, 0, 20)
+        droneTitle.Position = UDim2.new(0, 8, 0, 4)
+        droneTitle.BackgroundTransparency = 1
+        droneTitle.Text = (drone.IsPinned and "📌 " or "") .. drone.CustomName
+        droneTitle.Font = Enum.Font.GothamBold
+        droneTitle.TextSize = 11
+        droneTitle.TextColor3 = Theme.White
+        droneTitle.TextXAlignment = Enum.TextXAlignment.Left
+        droneTitle.ZIndex = 8
+
+        local pinBtn = Instance.new("TextButton", feedCard)
+        pinBtn.Size = UDim2.new(0, 22, 0, 20)
+        pinBtn.Position = UDim2.new(1, -26, 0, 4)
+        pinBtn.BackgroundColor3 = Theme.Dark
+        pinBtn.Text = L("PinBtn")
+        pinBtn.TextSize = 10
+        pinBtn.ZIndex = 8
+        Instance.new("UICorner", pinBtn).CornerRadius = UDim.new(0, 4)
+
+        local viewBtn = Instance.new("TextButton", feedCard)
+        viewBtn.Size = UDim2.new(0.22, 0, 0, 24)
+        viewBtn.Position = UDim2.new(0, 8, 0, 32)
+        viewBtn.BackgroundColor3 = Theme.Dark
+        viewBtn.Text = L("ViewBtn")
+        viewBtn.Font = Enum.Font.GothamMedium
+        viewBtn.TextSize = 9
+        viewBtn.TextColor3 = Theme.Accent
+        viewBtn.ZIndex = 8
+        Instance.new("UICorner", viewBtn).CornerRadius = UDim.new(0, 5)
+
+        local renameBtn = Instance.new("TextButton", feedCard)
+        renameBtn.Size = UDim2.new(0.24, 0, 0, 24)
+        renameBtn.Position = UDim2.new(0.25, 0, 0, 32)
+        renameBtn.BackgroundColor3 = Theme.Dark
+        renameBtn.Text = L("RenameBtn")
+        renameBtn.Font = Enum.Font.GothamMedium
+        renameBtn.TextSize = 9
+        renameBtn.TextColor3 = Theme.White
+        renameBtn.ZIndex = 8
+        Instance.new("UICorner", renameBtn).CornerRadius = UDim.new(0, 5)
+
+        local flashBtn = Instance.new("TextButton", feedCard)
+        flashBtn.Size = UDim2.new(0.22, 0, 0, 24)
+        flashBtn.Position = UDim2.new(0.51, 0, 0, 32)
+        flashBtn.BackgroundColor3 = Theme.Dark
+        flashBtn.Text = L("FlashBtn")
+        flashBtn.Font = Enum.Font.GothamMedium
+        flashBtn.TextSize = 9
+        flashBtn.TextColor3 = Theme.White
+        flashBtn.ZIndex = 8
+        Instance.new("UICorner", flashBtn).CornerRadius = UDim.new(0, 5)
+
+        local delBtn = Instance.new("TextButton", feedCard)
+        delBtn.Size = UDim2.new(0.22, 0, 0, 24)
+        delBtn.Position = UDim2.new(0.75, 0, 0, 32)
+        delBtn.BackgroundColor3 = Theme.Dark
+        delBtn.Text = L("DeleteBtn")
+        delBtn.Font = Enum.Font.GothamMedium
+        delBtn.TextSize = 9
+        delBtn.TextColor3 = Theme.Red
+        delBtn.ZIndex = 8
+        Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 5)
+
+        pinBtn.MouseButton1Click:Connect(function()
+            drone.IsPinned = not drone.IsPinned
+            refreshDroneFeedsUI()
+        end)
+
+        renameBtn.MouseButton1Click:Connect(function()
+            promptRename(drone)
+        end)
+
+        viewBtn.MouseButton1Click:Connect(function()
+            if drone.Part then
+                currentControllingDrone = drone
+                setCharacterMovement(false)
+                SpeedHud.Visible = true
+                Camera.CameraType = Enum.CameraType.Scriptable
+                Camera.CFrame = drone.Part.CFrame * CFrame.new(0, -0.1, -0.8)
+            end
+        end)
+
+        flashBtn.MouseButton1Click:Connect(function()
+            if drone.Light then
+                drone.Light.Enabled = not drone.Light.Enabled
+                drone.LampLens.Color = drone.Light.Enabled and Color3.fromRGB(255, 255, 180) or Color3.fromRGB(80, 80, 80)
+            end
+        end)
+
+        delBtn.MouseButton1Click:Connect(function()
+            explodeDrone(drone, idx)
+        end)
+    end
+end
+
+-- КНОПКА ВОЗВРАТА КАМЕРЫ
+local ResetCamBtn = Instance.new("TextButton", BodyContainer)
+ResetCamBtn.Size = UDim2.new(1, 0, 0, 32)
+ResetCamBtn.Position = UDim2.new(0, 0, 1, -34)
+ResetCamBtn.BackgroundColor3 = Theme.Dark
+ResetCamBtn.Text = L("ReturnCam")
+ResetCamBtn.Font = Enum.Font.GothamBold
+ResetCamBtn.TextSize = 11
+ResetCamBtn.TextColor3 = Theme.White
+ResetCamBtn.ZIndex = 3
+Instance.new("UICorner", ResetCamBtn).CornerRadius = UDim.new(0, 6)
+
+ResetCamBtn.MouseButton1Click:Connect(function()
+    lockCurrentDrone()
+end)
+
+SpawnDroneBtn.MouseButton1Click:Connect(spawnDrone)
+
+-- ===== ВЫКЛЮЧЕНИЕ СИСТЕМЫ =====
+local function updateTexts()
+    HeaderTitle.Text = L("Title")
+    AuthorLabel.Text = L("Author")
+    LangBtn.Text = currentLanguage
+    SpawnDroneBtn.Text = L("SpawnBtn")
+    SpeedSliderTitle.Text = L("SpeedSliderTitle")
+    RightTitle.Text = L("DroneListTitle")
+    InstructionsLabel.Text = L("ControlsInfo")
+    ActiveCountLabel.Text = L("ActiveCount") .. tostring(#activeDrones) .. " / " .. tostring(maxDrones)
+    ResetCamBtn.Text = L("ReturnCam")
+    refreshDroneFeedsUI()
+end
+
+LangBtn.MouseButton1Click:Connect(function()
+    currentLanguage = (currentLanguage == "RU") and "EN" or "RU"
+    updateTexts()
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    isScriptActive = false
+    setCharacterMovement(true)
+
+    for _, drone in ipairs(activeDrones) do
+        if drone.Model then drone.Model:Destroy() end
+    end
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        Camera.CameraType = Enum.CameraType.Custom
+        Camera.CameraSubject = LocalPlayer.Character.Humanoid
+    end
+    ScreenGui:Destroy()
+end)
+
+-- Плавное появление UI
+MainScale.Scale = 0
+tween(MainScale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
